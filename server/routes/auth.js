@@ -74,27 +74,32 @@ router.post('/logout', (_req, res) => {
 });
 
 router.patch('/me', requireAuth, async (req, res) => {
-  const { name, glyph, current_password, new_password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  try {
+    const { name, glyph, current_password, new_password } = req.body;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
 
-  const updates = {};
-  if (name?.trim())  updates.name  = name.trim();
-  if (glyph)         updates.glyph = glyph;
+    const updates = {};
+    if (name?.trim())  updates.name  = name.trim();
+    if (glyph)         updates.glyph = glyph;
 
-  if (new_password) {
-    if (!current_password)
-      return res.status(400).json({ error: 'Current password required' });
-    const ok = await bcrypt.compare(current_password, user.password_hash);
-    if (!ok) return res.status(401).json({ error: 'Incorrect current password' });
-    if (new_password.length < 8)
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    updates.password_hash = await bcrypt.hash(new_password, 12);
+    if (new_password) {
+      if (!current_password)
+        return res.status(400).json({ error: 'Current password required' });
+      const ok = await bcrypt.compare(current_password, user.password_hash);
+      if (!ok) return res.status(401).json({ error: 'Incorrect current password' });
+      if (new_password.length < 8)
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      updates.password_hash = await bcrypt.hash(new_password, 12);
+    }
+
+    if (Object.keys(updates).length === 0) return res.json(publicUser(user));
+    const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    db.prepare(`UPDATE users SET ${setClause} WHERE id = ?`).run(...Object.values(updates), req.user.id);
+    res.json(publicUser(db.prepare('SELECT id, username, name, glyph FROM users WHERE id = ?').get(req.user.id)));
+  } catch (err) {
+    console.error('PATCH /me error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-
-  if (Object.keys(updates).length === 0) return res.json(publicUser(user));
-  const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-  db.prepare(`UPDATE users SET ${setClause} WHERE id = ?`).run(...Object.values(updates), req.user.id);
-  res.json(publicUser(db.prepare('SELECT id, username, name, glyph FROM users WHERE id = ?').get(req.user.id)));
 });
 
 export default router;
