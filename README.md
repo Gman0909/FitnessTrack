@@ -44,7 +44,7 @@ Docker is the easiest and most consistent deployment method. It works on Windows
 **Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) or Docker Engine (Linux/Pi — see below).
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/FitnessTrack.git
+git clone https://github.com/Gman0909/FitnessTrack.git
 cd FitnessTrack
 docker-compose up -d
 ```
@@ -74,7 +74,7 @@ node --version  # should print v20.x.x or higher
 #### 2. Clone and set up
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/FitnessTrack.git
+git clone https://github.com/Gman0909/FitnessTrack.git
 cd FitnessTrack
 bash scripts/setup.sh
 ```
@@ -124,7 +124,7 @@ Then follow the Docker instructions above.
 Open Command Prompt or PowerShell:
 
 ```cmd
-git clone https://github.com/YOUR_USERNAME/FitnessTrack.git
+git clone https://github.com/Gman0909/FitnessTrack.git
 cd FitnessTrack
 scripts\setup.bat
 ```
@@ -165,7 +165,7 @@ Use this if you want to modify the code. Vite's dev server provides hot-reload f
 > **Note:** In development, the frontend runs on **port 5173** (Vite), not 3001. Port 3001 is the API only. Vite proxies all `/api` requests to the Express server automatically.
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/FitnessTrack.git
+git clone https://github.com/Gman0909/FitnessTrack.git
 cd FitnessTrack
 npm run install:all   # installs both server and client dependencies
 npm run setup         # create database and seed exercises
