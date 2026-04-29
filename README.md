@@ -31,7 +31,7 @@ A self-hosted progressive overload fitness tracker. Log workouts, track weight p
 | Client | React 18, Vite 5, react-router-dom 6 |
 | Charts | Recharts |
 
-The server builds and serves the compiled React client in production. In development, Vite runs on a separate port and proxies `/api` to the server.
+**How serving works:** The Express server on port 3001 serves both the API and the compiled React client — but only once the client has been built (`npm run build`). The built files live in `client/dist/`, which is not committed to the repository. The setup scripts for each platform run the build step automatically. In development (Option 4), the client is served by Vite on port 5173 instead, which proxies API calls to the Express server on 3001.
 
 ---
 
@@ -49,7 +49,7 @@ cd FitnessTrack
 docker-compose up -d
 ```
 
-The app will be available at `http://localhost:3001`.
+The build runs automatically inside Docker (including the React client). Once complete, the app — frontend and API — is available at `http://localhost:3001`.
 
 > **Important:** Docker builds `better-sqlite3` (a native addon) inside the container for the target architecture. Always build on the machine you intend to run on. Cross-compilation is not supported by the default setup.
 
@@ -79,7 +79,7 @@ cd FitnessTrack
 bash scripts/setup.sh
 ```
 
-This installs dependencies, builds the React client, and seeds the exercise library.
+This installs dependencies, **builds the React client into `client/dist/`**, and seeds the exercise library. The build step is required — without it the server has no frontend to serve.
 
 #### 3. Run
 
@@ -87,7 +87,7 @@ This installs dependencies, builds the React client, and seeds the exercise libr
 npm start
 ```
 
-The app is available at `http://localhost:3001`, or from other devices on your network at `http://<pi-ip-address>:3001`.
+The app — frontend and API — is available at `http://localhost:3001`, or from other devices on your network at `http://<pi-ip-address>:3001`.
 
 #### 4. Run as a system service (auto-start on boot)
 
@@ -129,6 +129,8 @@ cd FitnessTrack
 scripts\setup.bat
 ```
 
+This installs dependencies, **builds the React client into `client\dist\`**, and seeds the exercise library. The build step is required — without it the server has no frontend to serve.
+
 #### 2. Run
 
 ```cmd
@@ -141,7 +143,7 @@ Or directly:
 npm start
 ```
 
-The app is available at `http://localhost:3001`.
+The app — frontend and API — is available at `http://localhost:3001`.
 
 #### Run as a Windows background service
 
@@ -160,6 +162,8 @@ nssm start FitnessTrack
 
 Use this if you want to modify the code. Vite's dev server provides hot-reload for the client.
 
+> **Note:** In development, the frontend runs on **port 5173** (Vite), not 3001. Port 3001 is the API only. Vite proxies all `/api` requests to the Express server automatically.
+
 ```bash
 git clone https://github.com/YOUR_USERNAME/FitnessTrack.git
 cd FitnessTrack
@@ -173,11 +177,11 @@ Then open two terminals:
 # Terminal 1 — API server (port 3001)
 npm run dev
 
-# Terminal 2 — React dev server (port 5173, proxies /api to 3001)
+# Terminal 2 — React dev server with hot-reload (port 5173)
 cd client && npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open **`http://localhost:5173`** in your browser.
 
 ---
 
