@@ -91,10 +91,36 @@ The app — frontend and API — is available at `http://localhost:3001`, or fro
 
 #### 4. Run as a system service (auto-start on boot)
 
-Edit `scripts/fitnesstrack.service` and update `User` and `WorkingDirectory` to match your setup (default assumes user `pi` and path `/home/pi/FitnessTrack`). Then:
+The setup script handles this automatically — at the end of `bash scripts/setup.sh` it will ask if you want to install the service. It detects your username, working directory, and Node.js path automatically.
+
+If you skipped that step or need to reinstall the service manually:
 
 ```bash
-sudo cp scripts/fitnesstrack.service /etc/systemd/system/
+bash scripts/setup.sh   # re-run and answer yes to the service prompt
+```
+
+Or install manually (replace the values to match your system):
+
+```bash
+sudo tee /etc/systemd/system/fitnesstrack.service > /dev/null <<EOF
+[Unit]
+Description=FitnessTrack
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=$(pwd)
+ExecStart=$(which node) server/index.js
+Restart=on-failure
+RestartSec=5
+Environment=PORT=3001
+Environment=DATABASE_PATH=$(pwd)/fitness.db
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 sudo systemctl daemon-reload
 sudo systemctl enable fitnesstrack
 sudo systemctl start fitnesstrack

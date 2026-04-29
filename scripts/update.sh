@@ -19,9 +19,33 @@ npm run build
 echo ""
 echo "Update complete."
 
-# Restart systemd service if it is running
-if systemctl is-active --quiet fitnesstrack 2>/dev/null; then
-  echo "Restarting fitnesstrack service..."
+# If the service file is already installed, refresh it in case node path or
+# working directory changed, then restart.
+if systemctl is-active --quiet fitnesstrack 2>/dev/null || systemctl is-enabled --quiet fitnesstrack 2>/dev/null; then
+  INSTALL_USER="$(whoami)"
+  INSTALL_DIR="$(pwd)"
+  NODE_BIN="$(command -v node)"
+
+  sudo tee /etc/systemd/system/fitnesstrack.service > /dev/null <<EOF
+[Unit]
+Description=FitnessTrack
+After=network.target
+
+[Service]
+Type=simple
+User=${INSTALL_USER}
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${NODE_BIN} server/index.js
+Restart=on-failure
+RestartSec=5
+Environment=PORT=3001
+Environment=DATABASE_PATH=${INSTALL_DIR}/fitness.db
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo systemctl daemon-reload
   sudo systemctl restart fitnesstrack
   echo "Service restarted."
 else
