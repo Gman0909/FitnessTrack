@@ -97,7 +97,9 @@ function AppShell() {
           >
             <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>{user.glyph}</span>
             <span style={{ fontWeight: '500', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</span>
-            <span style={{ fontSize: '0.55rem', color: 'var(--dim)', marginLeft: '1px' }}>▾</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, transition: 'transform 0.15s', transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)', color: 'var(--muted)' }}>
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
 
           {menuOpen && (
