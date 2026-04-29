@@ -1,12 +1,31 @@
-import { Routes, Route, NavLink } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import TodayPage      from './pages/TodayPage.jsx';
 import PlansPage      from './pages/PlansPage.jsx';
 import PlanDetailPage from './pages/PlanDetailPage.jsx';
 import AuthPage       from './pages/AuthPage.jsx';
-import { HistoryPage, SetupPage } from './pages/stubs.jsx';
+import ProfilePage    from './pages/ProfilePage.jsx';
+import { SetupPage }  from './pages/stubs.jsx';
+import { StatsPage }  from './pages/StatsPage.jsx';
 import { UnitContext, useUnitProvider } from './units.js';
 import { AuthProvider, useAuth } from './auth.jsx';
 import { api } from './api/index.js';
+
+// ── Shared barbell logo ───────────────────────────────────────────────────────
+
+export function BarbellLogo({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1"  y="7"   width="3"  height="10" rx="1.5" fill="#f0a030"/>
+      <rect x="4"  y="9.5" width="2"  height="5"  rx="0.75" fill="#f0a030"/>
+      <rect x="6"  y="11"  width="12" height="2"  rx="1"   fill="#f0a030"/>
+      <rect x="18" y="9.5" width="2"  height="5"  rx="0.75" fill="#f0a030"/>
+      <rect x="20" y="7"   width="3"  height="10" rx="1.5" fill="#f0a030"/>
+    </svg>
+  );
+}
+
+// ── Nav link style ────────────────────────────────────────────────────────────
 
 const linkStyle = ({ isActive }) => ({
   fontWeight: isActive ? '600' : 'normal',
@@ -17,9 +36,21 @@ const linkStyle = ({ isActive }) => ({
   whiteSpace: 'nowrap',
 });
 
+// ── App shell ─────────────────────────────────────────────────────────────────
+
 function AppShell() {
-  const unitCtx      = useUnitProvider();
+  const unitCtx           = useUnitProvider();
   const { user, setUser } = useAuth();
+  const navigate          = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function close(e) { if (!menuRef.current?.contains(e.target)) setMenuOpen(false); }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
 
   if (user === undefined) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
@@ -34,29 +65,56 @@ function AppShell() {
     setUser(null);
   }
 
+  const menuItemStyle = {
+    display: 'block', width: '100%', padding: '0.6rem 1rem',
+    background: 'none', border: 'none', textAlign: 'left',
+    fontSize: '0.875rem', cursor: 'pointer', color: 'var(--text)',
+    textDecoration: 'none',
+  };
+
   return (
     <UnitContext.Provider value={unitCtx}>
+
+      {/* Brand header */}
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0.45rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <BarbellLogo size={20} />
+        <span style={{ fontWeight: '800', fontSize: '0.95rem', color: 'var(--text)', letterSpacing: '-0.01em' }}>FitnessTrack</span>
+      </div>
+
+      {/* Nav bar */}
       <nav style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--surface)', overflowX: 'auto' }}>
-        <NavLink to="/"        end style={linkStyle}>Workout</NavLink>
-        <NavLink to="/schedule"    style={linkStyle}>Plans</NavLink>
-        <NavLink to="/history"     style={linkStyle}>History</NavLink>
-        <NavLink to="/setup"       style={linkStyle}>Setup</NavLink>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', paddingRight: '0.75rem', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '1.2rem', lineHeight: 1 }} title={user.name}>{user.glyph}</span>
-            <button onClick={handleLogout}
-              style={{ padding: '0.25rem 0.5rem', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', fontSize: '0.75rem', color: 'var(--dim)', cursor: 'pointer' }}>
-              Log out
-            </button>
-          </div>
+        <NavLink to="/"         end style={linkStyle}>Workout</NavLink>
+        <NavLink to="/schedule"     style={linkStyle}>Plans</NavLink>
+        <NavLink to="/stats"        style={linkStyle}>Stats</NavLink>
+
+        {/* User dropdown */}
+        <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '0.45rem 0.75rem', fontSize: '0.875rem' }}
+          >
+            <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>{user.glyph}</span>
+            <span style={{ fontWeight: '500', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</span>
+            <span style={{ fontSize: '0.55rem', color: 'var(--dim)', marginLeft: '1px' }}>▾</span>
+          </button>
+
+          {menuOpen && (
+            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 2px)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden', zIndex: 50, minWidth: '140px', boxShadow: '0 6px 16px rgba(0,0,0,0.35)' }}>
+              <NavLink to="/profile" onClick={() => setMenuOpen(false)} style={{ ...menuItemStyle, borderBottom: '1px solid var(--border)' }}>Profile</NavLink>
+              <NavLink to="/setup"   onClick={() => setMenuOpen(false)} style={{ ...menuItemStyle, borderBottom: '1px solid var(--border)' }}>Setup</NavLink>
+              <button onClick={() => { handleLogout(); setMenuOpen(false); }} style={{ ...menuItemStyle, color: 'var(--danger)' }}>Log out</button>
+            </div>
+          )}
         </div>
       </nav>
+
       <main style={{ padding: '1rem', maxWidth: '640px', margin: '0 auto' }}>
         <Routes>
           <Route path="/"             element={<TodayPage />} />
           <Route path="/schedule"     element={<PlansPage />} />
           <Route path="/schedule/:id" element={<PlanDetailPage />} />
-          <Route path="/history"      element={<HistoryPage />} />
+          <Route path="/stats"        element={<StatsPage />} />
+          <Route path="/profile"      element={<ProfilePage />} />
           <Route path="/setup"        element={<SetupPage />} />
         </Routes>
       </main>

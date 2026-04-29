@@ -221,6 +221,72 @@ This prints a temporary `https://xxxx.trycloudflare.com` URL you can open on any
 
 ---
 
+## HTTPS (self-hosted, LAN or public)
+
+FitnessTrack runs plain HTTP by default. If you need HTTPS — for example, to allow browsers to use the camera or vibration API, or to access the app from outside your network securely — you have two options:
+
+### Option A — Caddy (simplest, auto-HTTPS)
+
+[Caddy](https://caddyserver.com/) handles TLS certificates automatically via Let's Encrypt.
+
+```bash
+# Install Caddy (Debian/Ubuntu/Pi)
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install caddy
+```
+
+Create `/etc/caddy/Caddyfile`:
+
+```
+your-domain.com {
+    reverse_proxy localhost:3001
+}
+```
+
+Then: `sudo systemctl reload caddy`
+
+Caddy automatically obtains and renews the certificate. Replace `your-domain.com` with your actual domain (must be publicly reachable for Let's Encrypt).
+
+### Option B — nginx + Let's Encrypt (Raspberry Pi / Linux)
+
+```bash
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# Create site config
+sudo tee /etc/nginx/sites-available/fitnesstrack <<'EOF'
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/fitnesstrack /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# Obtain certificate (requires domain pointing to this machine)
+sudo certbot --nginx -d your-domain.com
+```
+
+Certbot modifies the nginx config to add HTTPS and sets up automatic renewal.
+
+### LAN-only HTTPS (no domain required)
+
+For LAN access only, use a self-signed certificate or [mkcert](https://github.com/FiloSottile/mkcert). Note that browsers will show a warning for self-signed certs unless you import the CA into your devices.
+
+---
+
 ## First run
 
 1. Navigate to the app in a browser
@@ -235,6 +301,24 @@ This prints a temporary `https://xxxx.trycloudflare.com` URL you can open on any
 
 ## Updating
 
+**Linux / Raspberry Pi** — run the update script (pulls, rebuilds, and restarts the systemd service if active):
+
+```bash
+bash scripts/update.sh
+```
+
+Or with the npm alias: `npm run update`
+
+**Windows:**
+
+```cmd
+scripts\update.bat
+```
+
+Then restart the server manually (`npm start`, or `nssm restart FitnessTrack` if running as a service).
+
+**Manual steps (any platform):**
+
 ```bash
 git pull
 npm run install:all
@@ -248,6 +332,10 @@ With Docker:
 git pull
 docker-compose up -d --build
 ```
+
+The exercise library (`server/seed.js`) is seeded automatically every time the server starts. New exercises added in updates will appear in your library after a restart — no manual migration needed. Existing exercises and all user data are preserved.
+
+**Custom exercises** you create in the app are stored only in your local `fitness.db` and are never overwritten by updates.
 
 ---
 

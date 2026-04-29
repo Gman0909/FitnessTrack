@@ -48,11 +48,16 @@ export const api = {
   updatePlanSlot:    (id, sid, body) => req('PATCH',  `/plans/${id}/schedule/${sid}`, body),
   removePlanSlot:    (id, sid)       => req('DELETE', `/plans/${id}/schedule/${sid}`),
 
+  // Stats
+  getStats:   (scope = 'all') => req('GET',  `/stats?scope=${scope}`),
+  resetStats: ()              => req('POST', '/stats/reset'),
+
   // Auth
-  getMe:      ()       => req('GET',  '/auth/me'),
-  login:      (body)   => req('POST', '/auth/login',    body),
-  register:   (body)   => req('POST', '/auth/register', body),
-  logout:     ()       => req('POST', '/auth/logout'),
+  getMe:         ()       => req('GET',   '/auth/me'),
+  login:         (body)   => req('POST',  '/auth/login',    body),
+  register:      (body)   => req('POST',  '/auth/register', body),
+  logout:        ()       => req('POST',  '/auth/logout'),
+  updateProfile: (body)   => req('PATCH', '/auth/me',       body),
 
   // Exercises
   getExercises:    (params = {}) => req('GET', `/exercises${params.user_equipment ? '?user_equipment=true' : ''}`),

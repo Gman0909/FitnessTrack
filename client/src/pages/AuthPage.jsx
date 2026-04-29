@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api/index.js';
 import { useAuth } from '../auth.jsx';
+import { BarbellLogo } from '../App.jsx';
 
 const GLYPHS = [
   '🏋️','🤸','🧘','🚴','🏃','💪','🥊','🏊',
@@ -70,8 +71,10 @@ export default function AuthPage() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '1rem' }}>
       <div style={{ width: '100%', maxWidth: '400px' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🏋️</div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800', color: 'var(--text)' }}>FitnessTrack</h1>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+            <BarbellLogo size={52} />
+          </div>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800', color: 'var(--text)', letterSpacing: '-0.01em' }}>FitnessTrack</h1>
         </div>
 
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>

@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import { randomBytes } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.DATABASE_PATH ?? join(__dirname, '..', 'fitness.db');
+export const dbPath = process.env.DATABASE_PATH ?? join(__dirname, '..', 'fitness.db');
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');

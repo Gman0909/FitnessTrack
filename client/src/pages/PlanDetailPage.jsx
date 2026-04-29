@@ -53,6 +53,7 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
   const [exercises, setExercises]     = useState([]);
   const [search, setSearch]           = useState('');
   const [muscleFilter, setMuscle]     = useState('');
+  const [equipFilter, setEquipFilter] = useState('');
   const [selected, setSelected]       = useState(null);
   const [creating, setCreating]       = useState(false);
   const [newName, setNewName]         = useState('');
@@ -67,10 +68,12 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
 
   useEffect(() => { api.getExercises({ user_equipment: true }).then(setExercises); }, []);
 
-  const muscleGroups = [...new Set(exercises.map(e => e.muscle_group))].sort();
+  const muscleGroups   = [...new Set(exercises.map(e => e.muscle_group))].sort();
+  const equipmentTypes = [...new Set(exercises.map(e => e.equipment))].sort();
   const filtered = exercises.filter(e =>
     e.name.toLowerCase().includes(search.toLowerCase()) &&
-    (!muscleFilter || e.muscle_group === muscleFilter)
+    (!muscleFilter || e.muscle_group === muscleFilter) &&
+    (!equipFilter  || e.equipment    === equipFilter)
   );
 
   async function handleCreateExercise() {
@@ -156,11 +159,15 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
           </>
         ) : !selected ? (
           <>
+            <input autoFocus placeholder="Search exercises…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input autoFocus placeholder="Search exercises…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-              <select value={muscleFilter} onChange={e => setMuscle(e.target.value)} style={inputStyle}>
+              <select value={muscleFilter} onChange={e => setMuscle(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
                 <option value="">All muscles</option>
-                {muscleGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                {muscleGroups.map(g => <option key={g} value={g} style={{ textTransform: 'capitalize' }}>{g}</option>)}
+              </select>
+              <select value={equipFilter} onChange={e => setEquipFilter(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                <option value="">All equipment</option>
+                {equipmentTypes.map(t => <option key={t} value={t} style={{ textTransform: 'capitalize' }}>{t}</option>)}
               </select>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
@@ -430,28 +437,27 @@ function CalendarTab({ planId, weekCount, onWeekCountChange }) {
                 );
               }
 
-              const logged  = day.session?.checked_in === 1;
-              const started = day.session && !logged;
-              const isPast  = day.is_past && !day.is_today;
-              const isToday = day.is_today;
-              const missed  = isPast && !day.session;
+              const completed = day.session?.checked_in === 1;
+              const partial   = !completed && (day.session?.logged_count ?? 0) > 0;
+              const isPast    = day.is_past && !day.is_today;
+              const isToday   = day.is_today;
+              const missed    = isPast && !completed && !partial && !day.session;
 
               let bg        = 'var(--surface)';
               let border    = '1px solid var(--border)';
               let textColor = 'var(--muted)';
-              let label     = DAY_SHORT[dow];
               let opacity   = 1;
 
-              if (logged)  { bg = '#1e3b1e'; border = '1px solid #2d5a2d'; textColor = 'var(--success)'; }
-              if (started) { bg = 'var(--surface2)'; border = '1px solid var(--muted)'; textColor = 'var(--text)'; }
-              if (isToday) { border = '2px solid var(--text)'; textColor = 'var(--text)'; }
-              if (missed)  { opacity = 0.35; }
+              if (completed) { bg = '#1e3b1e'; border = '1px solid #2d5a2d'; textColor = 'var(--success)'; }
+              if (partial)   { bg = '#2a1c00'; border = '1px solid #5a3c00'; textColor = '#f0a030'; }
+              if (isToday)   { border = '2px solid var(--text)'; textColor = 'var(--text)'; }
+              if (missed)    { opacity = 0.35; }
 
               return (
                 <div key={week.week_num}
                   style={{ width: COL, flexShrink: 0, height: '44px', marginLeft: '8px', borderRadius: '8px', background: bg, border, opacity, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: isToday || logged ? '600' : 'normal', color: textColor }}>
-                    {logged ? '✓' : isToday ? '▶' : started ? '…' : label}
+                  <span style={{ fontSize: '0.78rem', fontWeight: isToday || completed ? '600' : 'normal', color: textColor }}>
+                    {completed ? '✓✓' : partial ? '✓' : isToday ? '▶' : DAY_SHORT[dow]}
                   </span>
                   {day.date && (
                     <span style={{ fontSize: '0.6rem', color: textColor, opacity: 0.7 }}>{day.date.slice(5)}</span>

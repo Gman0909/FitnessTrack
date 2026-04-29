@@ -242,7 +242,9 @@ router.get('/:id/calendar', (req, res) => {
 
   const getSession = db.prepare(`
     SELECT s.id, s.checked_in,
-           COUNT(DISTINCT ls.exercise_id) as exercise_count
+           COUNT(DISTINCT ls.exercise_id) as exercise_count,
+           COUNT(DISTINCT CASE WHEN ls.skipped = 0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
+             THEN ls.exercise_id END) as logged_count
     FROM sessions s
     LEFT JOIN logged_sets ls ON ls.session_id = s.id
     WHERE s.date = ? AND s.user_id = ?

@@ -214,18 +214,20 @@ function DayPickerPanel({ calendarData, selectedDate, onSelect, weekCount, onDec
               if (!day) return <div key={week.week_num} style={{ width: COL, height: 40, flexShrink: 0, marginLeft: '6px' }} />;
 
               const completed  = day.session?.checked_in === 1;
+              const partial    = !completed && (day.session?.logged_count ?? 0) > 0;
               const isSelected = day.date === selectedDate;
-              const isPastMissed = day.is_past && !completed;
+              const isPastMissed = day.is_past && !completed && !partial;
 
               let bg = 'var(--surface2)', borderStyle = '1px solid var(--border)', textColor = 'var(--muted)';
               let opacity = 1, fontWeight = 'normal';
 
-              if (completed)         { bg = '#1a2e1a'; borderStyle = '1px solid #2d5a2d'; textColor = '#4caf50'; }
-              if (day.is_today && !isSelected) { borderStyle = '1px solid #555'; textColor = 'var(--text)'; }
-              if (isSelected)        { bg = completed ? '#1e3b1e' : 'var(--surface3)'; borderStyle = '2px solid var(--text)'; textColor = 'var(--text)'; fontWeight = '700'; }
+              if (completed)    { bg = '#1a2e1a'; borderStyle = '1px solid #2d5a2d'; textColor = '#4caf50'; }
+              if (partial)      { bg = '#2a1c00'; borderStyle = '1px solid #5a3c00'; textColor = '#f0a030'; }
+              if (day.is_today && !isSelected) { borderStyle = '1px solid #555'; textColor = completed ? '#4caf50' : partial ? '#f0a030' : 'var(--text)'; }
+              if (isSelected)   { bg = completed ? '#1e3b1e' : partial ? '#3a2800' : 'var(--surface3)'; borderStyle = '2px solid var(--text)'; textColor = 'var(--text)'; fontWeight = '700'; }
               if (isPastMissed && !isSelected) { opacity = 0.45; }
 
-              const label = completed ? '✓' : day.is_today && !isSelected ? '▶' : DAY_SHORT[dow];
+              const label = completed ? '✓✓' : partial ? '✓' : day.is_today && !isSelected ? '▶' : DAY_SHORT[dow];
 
               return (
                 <div key={week.week_num}
@@ -1016,7 +1018,13 @@ export default function TodayPage() {
         <button type="button" onClick={() => setCalendarOpen(o => !o)}
           style={{ marginTop:'4px', padding:'0.45rem 0.6rem', background: calendarOpen ? 'var(--surface3)' : 'var(--surface)', border:`1px solid ${calendarOpen ? 'var(--muted)' : 'var(--border)'}`, borderRadius:'8px', color:'var(--text)', fontSize:'1.1rem', cursor:'pointer', lineHeight:1 }}
           title="Switch workout day">
-          📅
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <rect x="7" y="14" width="3" height="3" rx="0.5" fill="currentColor" stroke="none" />
+          </svg>
         </button>
       </div>
 

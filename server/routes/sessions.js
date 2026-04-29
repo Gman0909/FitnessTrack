@@ -166,12 +166,13 @@ router.get('/history', (req, res) => {
   if (exercise_id) {
     const rows = db.prepare(`
       SELECT s.date,
-             SUM(CASE WHEN ls.skipped = 0 THEN ls.weight_used * ls.reps_done ELSE 0 END) as volume,
-             MAX(CASE WHEN ls.skipped = 0 THEN ls.weight_used ELSE 0 END) as max_weight,
-             COUNT(CASE WHEN ls.skipped = 0 THEN 1 END) as sets_logged
+             SUM(ls.weight_used * ls.reps_done) as volume,
+             MAX(ls.weight_used)                as max_weight,
+             COUNT(*)                           as sets_logged
       FROM logged_sets ls
       JOIN sessions s ON s.id = ls.session_id
       WHERE ls.exercise_id = ? AND s.user_id = ?
+        AND ls.skipped = 0 AND ls.weight_used IS NOT NULL AND ls.reps_done IS NOT NULL
       GROUP BY s.date
       ORDER BY s.date ASC
     `).all(exercise_id, req.user.id);
