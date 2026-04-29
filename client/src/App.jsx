@@ -82,13 +82,15 @@ function AppShell() {
       </div>
 
       {/* Nav bar */}
-      <nav style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--surface)', overflowX: 'auto' }}>
-        <NavLink to="/"         end style={linkStyle}>Workout</NavLink>
-        <NavLink to="/schedule"     style={linkStyle}>Plans</NavLink>
-        <NavLink to="/stats"        style={linkStyle}>Stats</NavLink>
+      <nav style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', overflowX: 'auto', flex: 1 }}>
+          <NavLink to="/"         end style={linkStyle}>Workout</NavLink>
+          <NavLink to="/schedule"     style={linkStyle}>Plans</NavLink>
+          <NavLink to="/stats"        style={linkStyle}>Stats</NavLink>
+        </div>
 
         {/* User dropdown */}
-        <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
+        <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
           <button
             onClick={() => setMenuOpen(o => !o)}
             style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '0.45rem 0.75rem', fontSize: '0.875rem' }}
