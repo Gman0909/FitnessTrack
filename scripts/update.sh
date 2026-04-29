@@ -3,6 +3,12 @@ set -e
 
 echo "=== FitnessTrack update ==="
 
+# If the service is installed, warm up sudo credentials now before the long
+# build steps, so the systemctl commands at the end don't prompt mid-run.
+if systemctl is-enabled --quiet fitnesstrack 2>/dev/null; then
+  sudo -v
+fi
+
 # Pull latest changes
 echo "Pulling latest changes..."
 git pull
@@ -21,7 +27,7 @@ echo "Update complete."
 
 # If the service file is already installed, refresh it in case node path or
 # working directory changed, then restart.
-if systemctl is-active --quiet fitnesstrack 2>/dev/null || systemctl is-enabled --quiet fitnesstrack 2>/dev/null; then
+if systemctl is-enabled --quiet fitnesstrack 2>/dev/null; then
   INSTALL_USER="$(whoami)"
   INSTALL_DIR="$(pwd)"
   NODE_BIN="$(command -v node)"

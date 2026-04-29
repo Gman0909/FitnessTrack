@@ -32,6 +32,7 @@ echo ""
 if command -v systemctl &>/dev/null; then
   read -r -p "Install as a systemd service (auto-start on boot)? [y/N] " REPLY
   if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+    sudo -v
     INSTALL_USER="$(whoami)"
     INSTALL_DIR="$(pwd)"
     NODE_BIN="$(command -v node)"
