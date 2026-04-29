@@ -152,6 +152,15 @@ if (!cols('sessions').includes('user_id')) {
   db.pragma('foreign_keys = ON');
 }
 
+// ── Default equipment (all enabled on first install) ─────────────────────────
+
+if (db.prepare('SELECT COUNT(*) as n FROM user_equipment').get().n === 0) {
+  const ins = db.prepare('INSERT OR IGNORE INTO user_equipment (equipment) VALUES (?)');
+  db.transaction(() => {
+    for (const eq of ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']) ins.run(eq);
+  })();
+}
+
 // ── JWT secret (generated once, stored in DB) ─────────────────────────────────
 
 if (!db.prepare("SELECT 1 FROM config WHERE key = 'jwt_secret'").get())

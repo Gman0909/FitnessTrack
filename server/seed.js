@@ -81,6 +81,9 @@ const exercises = [
   { name: 'Hanging Leg Raise',              muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0   },
   { name: 'Cable Crunch',                   muscle_group: 'core',      equipment: 'cable',      default_increment: 2.5 },
   { name: 'Ab Wheel Rollout',               muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0   },
+  // Additional
+  { name: 'Reverse Fly',                    muscle_group: 'back',      equipment: 'dumbbell',   default_increment: 2   },
+  { name: 'Incline Curl',                   muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 2   },
 ];
 
 const insert = db.prepare(`
@@ -90,6 +93,72 @@ const insert = db.prepare(`
 
 export function seed() {
   db.transaction(() => { for (const ex of exercises) insert.run(ex); })();
+  seedSamplePlan();
+}
+
+const SAMPLE_SLOTS = [
+  // Monday (0)
+  { day: 0, name: 'Incline Dumbbell Fly',      sets: 2, weight: 36,   reps: 8 },
+  { day: 0, name: 'Dumbbell Row',               sets: 2, weight: null },
+  { day: 0, name: 'Sissy Squat',                sets: 2, weight: null },
+  { day: 0, name: 'Incline Dumbbell Press',     sets: 2, weight: null },
+  { day: 0, name: 'Reverse Fly',                sets: 3, weight: null },
+  // Tuesday (1)
+  { day: 1, name: 'Dumbbell Curl',              sets: 3, weight: 23,   reps: 8 },
+  { day: 1, name: 'Skull Crushers',             sets: 2, weight: 23,   reps: 8 },
+  { day: 1, name: 'Overhead Tricep Extension',  sets: 2, weight: 18,   reps: 8 },
+  { day: 1, name: 'Alternating Curl',           sets: 2, weight: 23,   reps: 8 },
+  { day: 1, name: 'Incline Y Raises',           sets: 2, weight: 12.5, reps: 8 },
+  // Thursday (3)
+  { day: 3, name: 'Incline Dumbbell Fly',       sets: 2, weight: 36,   reps: 8 },
+  { day: 3, name: 'Dumbbell Row',               sets: 2, weight: 36,   reps: 8 },
+  { day: 3, name: 'Alternating Curl',           sets: 3, weight: 23,   reps: 8 },
+  { day: 3, name: 'Stiff Legged Deadlift',      sets: 3, weight: 82,   reps: 8 },
+  { day: 3, name: 'Sissy Squat',                sets: 3, weight: null },
+  // Friday (4)
+  { day: 4, name: 'Spider Curl',                sets: 3, weight: 18,   reps: 8 },
+  { day: 4, name: 'Dip',                        sets: 2, weight: null },
+  { day: 4, name: 'Incline Curl',               sets: 3, weight: 23,   reps: 8 },
+  { day: 4, name: 'Hip Thrust',                 sets: 2, weight: 28,   reps: 8 },
+  { day: 4, name: 'Incline Y Raises',           sets: 3, weight: 12.5, reps: 8 },
+];
+
+function createSamplePlan(userId) {
+  const { lastInsertRowid: planId } = db.prepare(
+    "INSERT INTO workout_plans (name, is_active, week_count, user_id) VALUES ('Sample Workout', 0, 4, ?)"
+  ).run(userId ?? null);
+
+  const insDay    = db.prepare('INSERT INTO plan_days (plan_id, day_of_week) VALUES (?, ?)');
+  const insSlot   = db.prepare('INSERT INTO schedule (plan_id, day_of_week, exercise_id, set_count, position) VALUES (?, ?, ?, ?, ?)');
+  const insTarget = db.prepare("INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, date('now'), ?)");
+  const getEx     = name => db.prepare('SELECT id FROM exercises WHERE name = ?').get(name)?.id;
+
+  db.transaction(() => {
+    for (const dow of [0, 1, 3, 4]) insDay.run(planId, dow);
+    const posByDay = {};
+    for (const slot of SAMPLE_SLOTS) {
+      const exId = getEx(slot.name);
+      if (!exId) continue;
+      const pos = posByDay[slot.day] ?? 0;
+      posByDay[slot.day] = pos + 1;
+      insSlot.run(planId, slot.day, exId, slot.sets, pos);
+      if (slot.weight !== null) {
+        for (let i = 1; i <= slot.sets; i++) insTarget.run(exId, i, slot.weight, slot.reps, planId);
+      }
+    }
+  })();
+}
+
+function seedSamplePlan() {
+  // Create a copy for each existing user who doesn't already have it
+  const users = db.prepare('SELECT id FROM users').all();
+  for (const { id: userId } of users) {
+    if (!db.prepare("SELECT 1 FROM workout_plans WHERE name = 'Sample Workout' AND user_id = ?").get(userId))
+      createSamplePlan(userId);
+  }
+  // Keep a null-user version so new registrants automatically claim it
+  if (!db.prepare("SELECT 1 FROM workout_plans WHERE name = 'Sample Workout' AND user_id IS NULL").get())
+    createSamplePlan(null);
 }
 
 // Run directly (npm run setup / node server/seed.js)

@@ -6,11 +6,18 @@ export function computeCheckinModifier({ pain, recovery, pump }) {
 }
 
 export function nextSetTarget(currentTarget, loggedSet, modifier = 0) {
-  const { weight, reps, increment = 2.5 } = currentTarget;
+  const { weight, reps, increment = 2.5, equipment } = currentTarget;
 
   if (loggedSet.skipped) return { weight, reps };
 
   const repsDone = loggedSet.reps_done;
+
+  if (equipment === 'bodyweight') {
+    // Rep-only progression — no weight changes, no upper cap
+    const nextReps = repsDone < reps - 1 ? reps : reps + 1;
+    return { weight, reps: Math.max(1, Math.round(nextReps + modifier)) };
+  }
+
   let nextWeight = weight;
   let nextReps;
 

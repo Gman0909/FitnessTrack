@@ -359,20 +359,20 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
 
 // ── Set row ────────────────────────────────────────────────────────────────────
 
-function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone, onResetCheckin, onValuesChange, resetCounter = 0, initialStatus = 'idle', initialReps = '' }) {
+function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone, onResetCheckin, onValuesChange, resetCounter = 0, initialStatus = 'idle', initialReps = '', isBodyweight = false, bodyweightStr = '' }) {
   const { unit, toKg } = useUnit();
 
   // Initialise weight in the user's display unit so they edit in familiar numbers
   const [weight, setWeight] = useState(() => {
-    if (set.weight == null) return '';
+    if (isBodyweight || set.weight == null) return '';
     return unit === 'lbs' ? String(parseFloat((set.weight * 2.2046).toFixed(1))) : String(set.weight);
   });
   const [reps, setReps]     = useState(initialReps);
   const [status, setStatus] = useState(initialStatus);
 
   useEffect(() => {
-    onValuesChange?.(weight, reps, status);
-  }, [weight, reps, status]); // eslint-disable-line
+    onValuesChange?.(isBodyweight ? bodyweightStr : weight, reps, status);
+  }, [weight, reps, status, bodyweightStr]); // eslint-disable-line
 
   useEffect(() => {
     if (!resetCounter) return;
@@ -388,9 +388,11 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
 
   async function handleLog() {
     if (status === 'logged') { setStatus('idle'); onUndone(); triggerReset(); return; }
-    const repsDone  = parseInt(reps, 10);
+    const repsDone = parseInt(reps, 10);
     if (!repsDone || repsDone < 1) return;
-    const weightKg  = weight !== '' ? toKg(parseFloat(weight)) : (set.weight ?? 0);
+    const weightKg = isBodyweight
+      ? (bodyweightStr !== '' ? toKg(parseFloat(bodyweightStr)) : 0)
+      : (weight !== '' ? toKg(parseFloat(weight)) : (set.weight ?? 0));
     await api.logSet(sessionId, { exercise_id: exerciseId, set_num: set.set_num, reps_done: repsDone, skipped: 0, weight_used: weightKg });
     setStatus('logged');
     onDone();
@@ -411,8 +413,8 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
   const pill = { display:'flex', alignItems:'center', justifyContent:'center', background:'var(--input-bg)', border:'1px solid var(--border)', borderRadius:'8px', height:'42px', fontSize:'1rem', fontWeight:'500' };
 
   if (status === 'skipped') return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
-      <div style={{ ...pill, color:'var(--dim)', gridColumn:'1/3', justifyContent:'flex-start', paddingLeft:'0.75rem' }}>
+    <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
+      <div style={{ ...pill, color:'var(--dim)', gridColumn: isBodyweight ? '1/2' : '1/3', justifyContent:'flex-start', paddingLeft:'0.75rem' }}>
         <span style={{ fontSize:'0.85rem', color:'var(--dim)' }}>Set {set.set_num} — Skipped</span>
         <button type="button" onClick={handleSkip} style={{ marginLeft:'auto', marginRight:'0.5rem', background:'none', border:'none', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline' }}>Undo</button>
       </div>
@@ -426,13 +428,15 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
     borderColor: isLogged ? 'var(--success)' : 'var(--border)' };
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
-      <input type="number" value={weight} onChange={e => handleWeightChange(e.target.value)}
-        placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
-        style={inputStyle}
-      />
+    <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
+      {!isBodyweight && (
+        <input type="number" value={weight} onChange={e => handleWeightChange(e.target.value)}
+          placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
+          style={inputStyle}
+        />
+      )}
       <input type="number" value={reps} onChange={e => handleRepsChange(e.target.value)}
-        placeholder={String(set.reps)} min="1" max="30"
+        placeholder={String(set.reps)} min="1" max="999"
         style={inputStyle}
       />
       <div onClick={canLog ? handleLog : undefined}
@@ -561,8 +565,8 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
 // ── Exercise card ──────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetUndone, onResetCheckin, onAddSet, onRemoveSet, onSetValuesChange, resetCounter, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, doneSet, initials }) {
-  const { display } = useUnit();
+function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetUndone, onResetCheckin, onAddSet, onRemoveSet, onSetValuesChange, resetCounter, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, doneSet, initials, isBodyweight = false, bodyweightStr = '', onBodyweightChange }) {
+  const { unit, display } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
   const lastSetDone = doneSet.has(`${exercise.exercise_id}-${exercise.sets.length}`);
@@ -617,8 +621,28 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
         )}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 44px', gap:'10px', marginBottom:'8px' }}>
-        <div style={colHeader}>Weight</div>
+      {isBodyweight && (() => {
+        const bwLocked = exercise.sets.some(s => doneSet.has(`${exercise.exercise_id}-${s.set_num}`));
+        return (
+          <div style={{ marginBottom:'0.75rem' }}>
+            <div style={{ fontSize:'0.75rem', color:'var(--muted)', marginBottom:'4px' }}>Bodyweight</div>
+            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+              <input
+                type="number" value={bodyweightStr} min="0" step="0.5"
+                onChange={e => onBodyweightChange?.(e.target.value)}
+                placeholder={unit === 'lbs' ? '160' : '70'}
+                disabled={bwLocked}
+                style={{ padding:'0.4rem 0.6rem', border:'1px solid var(--border)', borderRadius:'8px', background:'var(--input-bg)', color: bwLocked ? 'var(--dim)' : 'var(--text)', width:'100px', textAlign:'center', fontSize:'1rem', outline:'none', opacity: bwLocked ? 0.6 : 1, cursor: bwLocked ? 'not-allowed' : 'text' }}
+              />
+              <span style={{ fontSize:'0.875rem', color:'var(--dim)' }}>{unit}</span>
+              {bwLocked && <span style={{ fontSize:'0.75rem', color:'var(--dim)' }}>locked</span>}
+            </div>
+          </div>
+        );
+      })()}
+
+      <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', marginBottom:'8px' }}>
+        {!isBodyweight && <div style={colHeader}>Weight</div>}
         <div style={colHeader}>Reps</div>
         <div style={{ ...colHeader, textAlign:'center' }}>Log</div>
       </div>
@@ -637,6 +661,8 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
             resetCounter={resetCounter}
             initialStatus={init?.status ?? 'idle'}
             initialReps={init?.reps ?? ''}
+            isBodyweight={isBodyweight}
+            bodyweightStr={bodyweightStr}
           />
         );
       })}
@@ -697,6 +723,9 @@ export default function TodayPage() {
 
   // Per-exercise reset counters (incremented to signal SetRows to untick)
   const [exerciseResetCounters, setExerciseResetCounters] = useState({});
+
+  // Per-exercise bodyweight input (propagates forward to subsequent BW exercises)
+  const [bodyweightValues, setBodyweightValues] = useState(new Map());
 
   // Drag state
   const [dragExerciseId, setDragExId] = useState(null);
@@ -783,10 +812,17 @@ export default function TodayPage() {
         }
       }
 
+      const storedBW = localStorage.getItem(`ft_bodyweight_${selectedDate}`) ?? localStorage.getItem('ft_bodyweight') ?? '';
+      const bwMap = new Map();
+      for (const ex of exs) {
+        if (ex.equipment === 'bodyweight') bwMap.set(ex.exercise_id, storedBW);
+      }
+
       setInitials(initMap);
       setDoneSet(initDone);
       setCheckedIn(checkinSet);
       setDismissed(preDismissed);
+      setBodyweightValues(bwMap);
       setSessLoading(false);
       setLoading(false);
     }
@@ -941,6 +977,22 @@ export default function TodayPage() {
     navigate(`/schedule/${newId}`);
   }
 
+  // ── Bodyweight propagation ────────────────────────────────────────────────────
+
+  function handleBodyweightChange(exerciseId, value) {
+    localStorage.setItem(`ft_bodyweight_${selectedDate}`, value);
+    localStorage.setItem('ft_bodyweight', value); // global fallback for new days
+    setBodyweightValues(prev => {
+      const next = new Map(prev);
+      let found = false;
+      for (const ex of exercises) {
+        if (ex.exercise_id === exerciseId) found = true;
+        if (found && ex.equipment === 'bodyweight') next.set(ex.exercise_id, value);
+      }
+      return next;
+    });
+  }
+
   // ── Skip helpers ──────────────────────────────────────────────────────────────
 
   async function handleSkipSession() {
@@ -961,11 +1013,16 @@ export default function TodayPage() {
         const key  = `${ex.exercise_id}-${set.set_num}`;
         const live = liveValues.current.get(key);
         if (live?.status === 'logged' || live?.status === 'skipped') continue;
-        const hasWeight = live?.weight !== '' && live?.weight != null;
+        const isBW      = ex.equipment === 'bodyweight';
+        const hasWeight = isBW || (live?.weight !== '' && live?.weight != null);
         const hasReps   = live?.reps !== '' && live?.reps != null && parseInt(live.reps, 10) >= 1;
         if (hasWeight && hasReps) {
+          const bwStr   = bodyweightValues.get(ex.exercise_id);
+          const weightKg = isBW
+            ? (bwStr ? toKg(parseFloat(bwStr)) : 0)
+            : toKg(parseFloat(live.weight));
           toLog.push({ exerciseName: ex.name, exerciseId: ex.exercise_id, setNum: set.set_num,
-            weightKg: toKg(parseFloat(live.weight)), reps: parseInt(live.reps, 10) });
+            weightKg, reps: parseInt(live.reps, 10) });
         } else {
           toSkip.push({ exerciseName: ex.name, exerciseId: ex.exercise_id, setNum: set.set_num });
         }
@@ -1065,6 +1122,9 @@ export default function TodayPage() {
               onDragEnd={() => { setDragExId(null); setDragOverId(null); }}
               doneSet={doneSet}
               initials={initials}
+              isBodyweight={ex.equipment === 'bodyweight'}
+              bodyweightStr={bodyweightValues.get(ex.exercise_id) ?? ''}
+              onBodyweightChange={val => handleBodyweightChange(ex.exercise_id, val)}
             />
           ))}
 

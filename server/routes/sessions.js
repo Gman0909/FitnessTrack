@@ -119,7 +119,7 @@ router.post('/:id/checkin', (req, res) => {
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   const loggedSets = db.prepare(`
-    SELECT ls.* FROM logged_sets ls
+    SELECT ls.*, e.equipment FROM logged_sets ls
     JOIN exercises e ON e.id = ls.exercise_id
     WHERE ls.session_id = ? AND e.muscle_group = ?
   `).all(sessionId, muscle_group);
@@ -131,7 +131,7 @@ router.post('/:id/checkin', (req, res) => {
   db.transaction(() => {
     for (const ls of loggedSets) {
       const current = db.prepare(`
-        SELECT st.*, e.default_increment as increment
+        SELECT st.*, e.default_increment as increment, e.equipment
         FROM set_targets st JOIN exercises e ON e.id = st.exercise_id
         WHERE st.exercise_id = ? AND st.set_num = ?
           AND st.valid_from <= date('now') AND st.plan_id IS ?
@@ -143,6 +143,28 @@ router.post('/:id/checkin', (req, res) => {
       writeTarget.run(ls.exercise_id, ls.set_num, weight, reps, tomorrowStr, planId);
     }
   })();
+
+  // Bodyweight: if any set logged > 50 reps, add a set to the schedule (max 6)
+  const bwOver50 = [...new Set(
+    loggedSets
+      .filter(ls => ls.equipment === 'bodyweight' && !ls.skipped && ls.reps_done > 50)
+      .map(ls => ls.exercise_id)
+  )];
+  if (bwOver50.length > 0) {
+    const getCount   = db.prepare('SELECT MAX(set_count) as n FROM schedule WHERE exercise_id = ? AND plan_id IS ?');
+    const bumpCount  = db.prepare('UPDATE schedule SET set_count = set_count + 1 WHERE exercise_id = ? AND plan_id IS ? AND set_count < 6');
+    const getTarget  = db.prepare('SELECT weight, reps FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= date(\'now\') ORDER BY valid_from DESC LIMIT 1');
+    const insTarget  = db.prepare('INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, ?, ?)');
+    db.transaction(() => {
+      for (const exId of bwOver50) {
+        const cur = getCount.get(exId, planId)?.n ?? 0;
+        if (cur >= 6) continue;
+        bumpCount.run(exId, planId);
+        const tmpl = getTarget.get(exId, cur, planId);
+        insTarget.run(exId, cur + 1, tmpl?.weight ?? 0, tmpl?.reps ?? 10, tomorrowStr, planId);
+      }
+    })();
+  }
 
   const allGroups = db.prepare(`
     SELECT DISTINCT e.muscle_group FROM logged_sets ls

@@ -88,18 +88,20 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
     }
   }
 
+  const isBodyweight = selected?.equipment === 'bodyweight';
   const parsedWeight = startWeight !== '' ? parseFloat(startWeight) : null;
-  const weightValid  = parsedWeight === null || (Number.isFinite(parsedWeight) && parsedWeight > 0);
+  const weightValid  = isBodyweight || parsedWeight === null || (Number.isFinite(parsedWeight) && parsedWeight > 0);
 
   async function handleAdd() {
     if (!selected || !weightValid) return;
     setSaving(true);
     try {
       await api.addToPlanSchedule(planId, { day_of_week: dayIndex, exercise_id: selected.id, set_count: setCount, position: 999 });
-      if (parsedWeight !== null) {
-        const weightKg = toKg(parsedWeight);
+      const weightKg   = isBodyweight ? 0 : (parsedWeight !== null ? toKg(parsedWeight) : null);
+      const targetReps = isBodyweight ? 10 : startReps;
+      if (isBodyweight || weightKg !== null) {
         for (let i = 1; i <= setCount; i++) {
-          await api.setTarget({ exercise_id: selected.id, set_num: i, weight: weightKg, reps: startReps, plan_id: planId });
+          await api.setTarget({ exercise_id: selected.id, set_num: i, weight: weightKg ?? 0, reps: targetReps, plan_id: planId });
         }
       }
       onAdd();
@@ -110,7 +112,7 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
 
   const inputStyle = { padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)' };
   const overlay    = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 };
-  const sheet      = { background: 'var(--surface2)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '640px', padding: '1.25rem', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: '0.75rem' };
+  const sheet      = { background: 'var(--surface2)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '640px', padding: '1.25rem', paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' };
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -195,32 +197,37 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
           <>
             <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: 0, textAlign: 'left', fontSize: '0.875rem' }}>← {selected.name}</button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <label style={{ width: '110px', fontSize: '0.9rem', color: 'var(--muted)' }}>Sets</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Sets</label>
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                   {[1,2,3,4,5].map(n => (
-                    <button key={n} onClick={() => setSetCount(n)} style={{ width: '2rem', height: '2rem', border: '1px solid var(--border)', borderRadius: '6px', background: setCount === n ? 'var(--btn)' : 'var(--surface)', color: setCount === n ? 'var(--btn-text)' : 'var(--text)' }}>{n}</button>
+                    <button key={n} onClick={() => setSetCount(n)} style={{ flex: 1, height: '2.25rem', border: '1px solid var(--border)', borderRadius: '6px', background: setCount === n ? 'var(--btn)' : 'var(--surface)', color: setCount === n ? 'var(--btn-text)' : 'var(--text)' }}>{n}</button>
                   ))}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <label style={{ width: '110px', fontSize: '0.9rem', color: 'var(--muted)' }}>Starting weight</label>
-                <input type="text" inputMode="decimal" value={startWeight} onChange={e => setStartWeight(e.target.value)} placeholder=""
-                  style={{ ...inputStyle, width: '60px', borderColor: !weightValid ? 'var(--danger)' : 'var(--border)' }} />
-                <span style={{ fontSize: '0.875rem', color: 'var(--dim)' }}>{unit}</span>
-                <span style={{ fontSize: '0.78rem', color: 'var(--dim)' }}>(optional)</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <label style={{ width: '110px', fontSize: '0.9rem', color: 'var(--muted)' }}>Starting reps</label>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
-                  {[6,8,10,12].map(n => (
-                    <button key={n} onClick={() => setStartReps(n)} style={{ width: '2.2rem', height: '2rem', border: '1px solid var(--border)', borderRadius: '6px', background: startReps === n ? 'var(--btn)' : 'var(--surface)', color: startReps === n ? 'var(--btn-text)' : 'var(--text)', fontSize: '0.85rem' }}>{n}</button>
-                  ))}
+              {!isBodyweight && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Starting weight <span style={{ fontSize: '0.78rem', color: 'var(--dim)' }}>(optional)</span></label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input type="text" inputMode="decimal" value={startWeight} onChange={e => setStartWeight(e.target.value)} placeholder=""
+                      style={{ ...inputStyle, width: '90px', borderColor: !weightValid ? 'var(--danger)' : 'var(--border)' }} />
+                    <span style={{ fontSize: '0.875rem', color: 'var(--dim)' }}>{unit}</span>
+                  </div>
                 </div>
-              </div>
+              )}
+              {!isBodyweight && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Starting reps</label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {[6,8,10,12].map(n => (
+                      <button key={n} onClick={() => setStartReps(n)} style={{ flex: 1, height: '2.25rem', border: '1px solid var(--border)', borderRadius: '6px', background: startReps === n ? 'var(--btn)' : 'var(--surface)', color: startReps === n ? 'var(--btn-text)' : 'var(--text)', fontSize: '0.85rem' }}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <button onClick={handleAdd} disabled={saving || !weightValid}
-              style={{ marginTop: '0.25rem', padding: '0.65rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', opacity: saving || !weightValid ? 0.4 : 1 }}>
+            <button onClick={handleAdd} disabled={saving || (!isBodyweight && !weightValid)}
+              style={{ marginTop: '0.25rem', padding: '0.65rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', opacity: saving || (!isBodyweight && !weightValid) ? 0.4 : 1 }}>
               {saving ? 'Adding…' : `Add ${setCount} set${setCount !== 1 ? 's' : ''}`}
             </button>
           </>
