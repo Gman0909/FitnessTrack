@@ -1,0 +1,16 @@
+[Unit]
+Description=FitnessTrack
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/FitnessTrack
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=5
+Environment=PORT=3001
+Environment=DATABASE_PATH=/home/pi/FitnessTrack/fitness.db
+
+[Install]
+WantedBy=multi-user.target

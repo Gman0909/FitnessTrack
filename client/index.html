@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FitnessTrack</title>
+    <style>
+      :root {
+        --bg:        #0f0f0f;
+        --surface:   #181818;
+        --surface2:  #212121;
+        --surface3:  #2a2a2a;
+        --border:    #2c2c2c;
+        --text:      #ececec;
+        --muted:     #aaa;
+        --dim:       #777;
+        --btn:       #ececec;
+        --btn-text:  #0f0f0f;
+        --success:   #4caf50;
+        --danger:    #e05555;
+        --input-bg:  #141414;
+        --checked-bg:#152015;
+
+        /* muscle group accent colours */
+        --mc-chest:     #e05c8a;
+        --mc-back:      #3cc9b0;
+        --mc-shoulders: #f0a030;
+        --mc-biceps:    #3cc9b0;
+        --mc-triceps:   #e05c8a;
+        --mc-legs:      #9b6fd4;
+        --mc-core:      #4caf50;
+        --mc-default:   #777;
+      }
+      *, *::before, *::after { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+      button { cursor: pointer; }
+      select, input, option { color-scheme: dark; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
