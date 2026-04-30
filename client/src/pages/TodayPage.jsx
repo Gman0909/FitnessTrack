@@ -13,8 +13,8 @@ const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Sat
 const DAY_SHORT  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const MC_COLORS = {
-  chest: '#e05c8a', back: '#3cc9b0', shoulders: '#f0a030',
-  biceps: '#3cc9b0', triceps: '#e05c8a', legs: '#9b6fd4', core: '#4caf50',
+  chest: '#f07098', back: '#3cc9b0', shoulders: '#f0a030',
+  biceps: '#3cc9b0', triceps: '#f07098', legs: '#b088e8', core: '#4caf50',
 };
 function mcColor(mg) { return MC_COLORS[mg] ?? '#777'; }
 
@@ -38,7 +38,7 @@ function fmtDate(dateStr) {
 function MuscleGroupBadge({ muscleGroup }) {
   const color = mcColor(muscleGroup);
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: `${color}22`, border: `1px solid ${color}55`, borderRadius: '6px', padding: '4px 10px 4px 8px' }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: `${color}0f`, border: `1px solid ${color}66`, borderRadius: '6px', padding: '4px 10px 4px 8px' }}>
       <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
         {[10, 14, 10].map((h, i) => <div key={i} style={{ width: '3px', height: `${h}px`, background: color, borderRadius: '2px' }} />)}
       </div>
