@@ -102,6 +102,25 @@ function ResetModal({ onClose, onDone }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+async function downloadExport(type, scope) {
+  const res = await fetch(`/api/stats/export?type=${type}&scope=${scope}`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Export failed');
+  const cd       = res.headers.get('Content-Disposition') ?? '';
+  const filename = cd.match(/filename="([^"]+)"/)?.[1] ?? `${type}.csv`;
+  const blob     = await res.blob();
+  const url      = URL.createObjectURL(blob);
+  const a        = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+const EXPORTS = [
+  { type: 'exercise_history', label: 'Exercise history',  desc: 'Every logged set — date, exercise, weight, reps' },
+  { type: 'sessions',         label: 'Session summary',   desc: 'One row per workout — volume and sets logged' },
+  { type: 'personal_bests',   label: 'Personal bests',    desc: 'All-time max weight per exercise' },
+  { type: 'weekly_volume',    label: 'Weekly volume',     desc: 'Total volume (kg·reps) by week' },
+];
+
 export function StatsPage() {
   const [scope,     setScope]     = useState('all');
   const [stats,     setStats]     = useState(null);
@@ -111,7 +130,15 @@ export function StatsPage() {
   const [selEx,     setSelEx]     = useState(null);
   const [exHistory, setExHistory] = useState([]);
   const [exMetric,  setExMetric]  = useState('volume');
+  const [exporting, setExporting] = useState(null);
   const { unit, display } = useUnit();
+
+  async function handleExport(type) {
+    setExporting(type);
+    try { await downloadExport(type, scope); }
+    catch (e) { alert(e.message); }
+    finally   { setExporting(null); }
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -320,8 +347,32 @@ export function StatsPage() {
         </div>
       </>}
 
-      {/* Danger zone */}
+      {/* Export */}
       <div style={{ marginTop: '2.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+        <h3 style={{ margin: '0 0 0.3rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)' }}>Export Data</h3>
+        <p style={{ margin: '0 0 0.85rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
+          Downloads respect the <em>All time / This plan</em> scope above. Data is always in kg.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          {EXPORTS.map(({ type, label, desc }) => (
+            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.55rem 0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>{label}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--dim)', marginTop: '0.1rem' }}>{desc}</div>
+              </div>
+              <button
+                onClick={() => handleExport(type)}
+                disabled={exporting !== null}
+                style={{ padding: '0.3rem 0.75rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--surface2)', color: exporting === type ? 'var(--dim)' : 'var(--text)', fontSize: '0.8rem', cursor: exporting !== null ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {exporting === type ? 'Downloading…' : 'Download CSV'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
         <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--danger)' }}>Danger Zone</h3>
         <p style={{ margin: '0 0 0.75rem', fontSize: '0.855rem', color: 'var(--muted)' }}>
           Permanently delete all training data. A backup is created automatically before deletion.
