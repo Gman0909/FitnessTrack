@@ -983,6 +983,8 @@ export default function TodayPage() {
       if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow) {
         setEndOfPlanModal(true);
       }
+      // Reload slot so isCurrent reflects the server state (session is done, next slot becomes current)
+      setReloadKey(k => k + 1);
     }
   }, [activePlan, groups, checkedInGroups, calendarData, selectedSlot]);
 
