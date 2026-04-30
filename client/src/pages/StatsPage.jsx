@@ -104,7 +104,9 @@ function ResetModal({ onClose, onDone }) {
 
 async function downloadExport(type, scope) {
   const res = await fetch(`/api/stats/export?type=${type}&scope=${scope}`, { credentials: 'include' });
-  if (!res.ok) throw new Error('Export failed');
+  if (!res.ok) throw new Error(`Export failed (${res.status})`);
+  const ct = res.headers.get('Content-Type') ?? '';
+  if (!ct.startsWith('text/csv')) throw new Error('Export failed — server returned unexpected content type. Try restarting the server.');
   const cd       = res.headers.get('Content-Disposition') ?? '';
   const filename = cd.match(/filename="([^"]+)"/)?.[1] ?? `${type}.csv`;
   const blob     = await res.blob();

@@ -32,6 +32,9 @@ app.use('/api/stats',     requireAuth, statsRouter);
 app.use('/api/admin',     adminRouter);
 app.use('/api/settings',  requireAuth, settingsRouter);
 
+// 404 any /api/* path that didn't match a route above — prevents catch-all from serving index.html for missing API endpoints
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
 // Serve built client in production
 const clientDist = join(__dirname, '..', 'client', 'dist');
 app.use(express.static(clientDist));
