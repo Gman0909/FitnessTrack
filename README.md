@@ -21,6 +21,63 @@ A self-hosted progressive overload fitness tracker. Log workouts, track weight p
 
 ---
 
+## How the algorithm works
+
+After every muscle group is logged, a check-in modal collects four ratings. Those ratings are summed into a single **modifier** that shapes the next session's targets.
+
+### Rating scores
+
+| Category | Option | Score |
+|---|---|---|
+| **Pain** | None | 0 |
+| | Low | −1 |
+| | Medium | −2 |
+| | High | *suspend — all targets held unchanged* |
+| **Recovery** | Never sore | +1 |
+| | Healed / Just in time | 0 |
+| | Still sore | −1 |
+| **Pump** | Poor | +1 |
+| | OK / Great | 0 |
+| **Intensity** | Too easy | +2 |
+| | Just right | 0 |
+| | Too much | −2 |
+
+The modifier is the sum of all four scores (range −5 to +4).
+
+### Progression rules
+
+| Situation | What happens |
+|---|---|
+| Pain = High | Hold all targets unchanged |
+| Modifier ≤ −3 | **Deload** — weight −10%, reps reset to range minimum |
+| Heaviest set hit the rep ceiling | **Bump weight** by one increment; reps recalculated to preserve volume |
+| Missed target reps by more than 1 | Hold (no rep or weight change) |
+| Otherwise | +1 rep |
+
+After the base decision, the modifier adjusts reps further (+1 per point above 0, −1 per point below). Positive signals are scaled by the **aggressiveness** setting (Conservative ×0.5, Moderate ×1.0, Aggressive ×1.5). If the modifier would push reps past the ceiling without a weight bump, the bump triggers automatically.
+
+Weight changes are applied **proportionally across all sets**, preserving pyramid and drop-set structure. Weights are rounded to the nearest 0.5 kg and capped at a 10% jump per session.
+
+### Worked examples (standard rep range 8–12, barbell bench, moderate aggressiveness)
+
+| Scenario | Ratings | Modifier | Outcome |
+|---|---|---|---|
+| Crushed it — logged 12 reps, felt way too easy | Pain: none, Recovery: never sore, Pump: OK, Intensity: too easy | 0 + 1 + 0 + 2 = **+3** | Hit ceiling (12 reps) → weight +2.5 kg, reps recalculated to preserve volume; +3 modifier adds 3 more reps |
+| Solid session — logged 10 of 10 reps | Pain: none, Recovery: healed, Pump: OK, Intensity: just right | **0** | +1 rep (11 next session) |
+| Tough session — missed reps, still sore | Pain: low, Recovery: still sore, Pump: OK, Intensity: too much | −1 + −1 + 0 + −2 = **−4** | Modifier ≤ −3 → deload: weight −10%, reps reset to 8 |
+
+### Per-muscle-group settings
+
+| Setting | Options |
+|---|---|
+| **Rep range** | Powerlifting (5–8), Standard (8–12), Volume (12–15) |
+| **Aggressiveness** | Conservative (×0.5 on positive signals), Moderate (×1.0), Aggressive (×1.5) |
+| **Pause weight** | Blocks weight increases — only reps progress |
+
+Bodyweight exercises (pull-ups, dips, etc.) follow the same rep-progression logic but have no weight axis.
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
@@ -327,7 +384,13 @@ For LAN access only, use a self-signed certificate or [mkcert](https://github.co
 
 ## Updating
 
-**Linux / Raspberry Pi** — run the update script (pulls, rebuilds, and restarts the systemd service if active):
+**In-app (Linux / Raspberry Pi with systemd service):**
+
+If FitnessTrack is running as a systemd service, you can update it without a terminal. Navigate to **Setup** in the app → scroll to the bottom → click **Check for updates**. The app pulls the latest code, rebuilds the client, and restarts itself automatically. The page will reload once the new version is live.
+
+> This requires the server to be running under systemd with `Restart=on-failure` so the process manager brings it back up after the restart.
+
+**Linux / Raspberry Pi (terminal)** — run the update script (pulls, rebuilds, and restarts the systemd service if active):
 
 ```bash
 bash scripts/update.sh

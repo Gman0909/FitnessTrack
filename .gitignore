@@ -8,3 +8,4 @@ client/dist/
 .DS_Store
 Thumbs.db
 scripts/seed-demo.js
+CLAUDE.md
