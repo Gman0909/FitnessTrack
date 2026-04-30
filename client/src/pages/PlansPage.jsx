@@ -77,8 +77,8 @@ function CloneModal({ plan, onCloned, onClose }) {
 
   useEffect(() => { api.getPlanCalendar(plan.id).then(setCalendar); }, [plan.id]);
 
-  const pastWeeks = calendar
-    ? calendar.weeks.filter(w => w.days.some(d => d.is_past || d.is_today))
+  const completedWeeks = calendar
+    ? calendar.weeks.filter(w => w.days.some(d => (d.session?.exercise_count ?? 0) > 0))
     : [];
 
   async function handleClone() {
@@ -98,19 +98,19 @@ function CloneModal({ plan, onCloned, onClose }) {
         <h3 style={{ margin:0, color:'var(--text)', fontSize:'1rem', fontWeight:'700' }}>Clone "{plan.name}"</h3>
 
         <div>
-          <p style={{ margin:'0 0 0.5rem', fontSize:'0.8rem', color:'var(--muted)' }}>Seed starting targets from</p>
+          <p style={{ margin:'0 0 0.5rem', fontSize:'0.8rem', color:'var(--muted)' }}>Pick up weights from</p>
           <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem' }}>
             <button onClick={() => setSeedWeek(null)} style={optBtn(seedWeek === null)}>
-              Current targets
+              Original starting weights
             </button>
             {!calendar && <p style={{ margin:0, fontSize:'0.8rem', color:'var(--dim)' }}>Loading weeks…</p>}
-            {pastWeeks.map(w => (
+            {completedWeeks.map(w => (
               <button key={w.week_num} onClick={() => setSeedWeek(w.week_num)} style={optBtn(seedWeek === w.week_num)}>
-                Week {w.week_num} <span style={{ opacity:0.65, fontWeight:'normal' }}>· {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span>
+                Week {w.week_num}{w.start_date && w.end_date ? <span style={{ opacity:0.65, fontWeight:'normal' }}> · {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span> : ''}
               </button>
             ))}
-            {calendar && pastWeeks.length === 0 && (
-              <p style={{ margin:0, fontSize:'0.8rem', color:'var(--dim)' }}>No past weeks to seed from.</p>
+            {calendar && completedWeeks.length === 0 && (
+              <p style={{ margin:0, fontSize:'0.8rem', color:'var(--dim)' }}>No completed weeks to seed from.</p>
             )}
           </div>
         </div>
@@ -187,7 +187,7 @@ function PlanCard({ plan, onActivate, onClone, onDelete, onClick }) {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginBottom: plan.total_days > 0 ? '0.65rem' : 0 }}>
           {plan.days.length > 0
             ? plan.days.map(d => (
                 <span key={d} style={{ fontSize: '0.75rem', color: 'var(--muted)', background: 'var(--surface2)', borderRadius: '4px', padding: '0.15rem 0.45rem' }}>
@@ -197,6 +197,21 @@ function PlanCard({ plan, onActivate, onClone, onDelete, onClick }) {
             : <span style={{ fontSize: '0.8rem', color: 'var(--dim)' }}>No days configured</span>
           }
         </div>
+        {plan.total_days > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <div style={{ flex: 1, height: '3px', borderRadius: '2px', background: 'var(--border)' }}>
+              <div style={{
+                height: '100%', borderRadius: '2px',
+                background: plan.completed_days >= plan.total_days ? 'var(--success)' : 'var(--btn)',
+                width: `${Math.min(100, Math.round((plan.completed_days / plan.total_days) * 100))}%`,
+                minWidth: plan.completed_days > 0 ? '3px' : '0',
+              }} />
+            </div>
+            <span style={{ fontSize: '0.7rem', color: 'var(--dim)', whiteSpace: 'nowrap' }}>
+              {plan.completed_days}/{plan.total_days}
+            </span>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>

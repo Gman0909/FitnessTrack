@@ -38,11 +38,36 @@ router.get('/active', (req, res) => {
 
 router.get('/', (req, res) => {
   const plans = db.prepare('SELECT * FROM workout_plans WHERE user_id = ? ORDER BY is_active DESC, created_at DESC').all(req.user.id);
-  res.json(plans.map(p => ({
-    ...p,
-    days: getPlanDays(p.id),
-    exercise_count: db.prepare('SELECT COUNT(*) as n FROM schedule WHERE plan_id = ?').get(p.id).n,
-  })));
+
+  const getCompletedDays = db.prepare(`
+    SELECT COUNT(*) as n FROM sessions s
+    WHERE s.plan_id = ? AND s.user_id = ? AND s.week_num <= ?
+      AND (
+        s.checked_in = 1
+        OR (
+          (SELECT COALESCE(SUM(sc.set_count), 0) FROM schedule sc
+           WHERE sc.plan_id = s.plan_id AND sc.day_of_week = s.session_dow) > 0
+          AND
+          (SELECT COUNT(*) FROM logged_sets ls
+           WHERE ls.session_id = s.id AND (ls.skipped = 1 OR ls.reps_done IS NOT NULL))
+          >=
+          (SELECT COALESCE(SUM(sc.set_count), 0) FROM schedule sc
+           WHERE sc.plan_id = s.plan_id AND sc.day_of_week = s.session_dow)
+        )
+      )
+  `);
+
+  res.json(plans.map(p => {
+    const days      = getPlanDays(p.id);
+    const weekCount = p.week_count ?? 4;
+    return {
+      ...p,
+      days,
+      exercise_count:  db.prepare('SELECT COUNT(*) as n FROM schedule WHERE plan_id = ?').get(p.id).n,
+      completed_days:  getCompletedDays.get(p.id, req.user.id, weekCount).n,
+      total_days:      days.length * weekCount,
+    };
+  }));
 });
 
 router.post('/', (req, res) => {
@@ -115,38 +140,29 @@ router.post('/:id/clone', (req, res) => {
       "INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, date('now'), ?)"
     );
 
-    if (seed_week && src.started_at) {
-      const [y, m, d]   = src.started_at.split('-').map(Number);
-      const srcStartMs  = Date.UTC(y, m - 1, d);
-      const srcStartDow = (new Date(srcStartMs).getUTCDay() + 6) % 7;
-      const srcWeekBase = srcStartMs - srcStartDow * 86400000;
-      const weekStartMs = srcWeekBase + (seed_week - 1) * 7 * 86400000;
-      const weekEndMs   = weekStartMs + 6 * 86400000;
-      const weekStartDate = new Date(weekStartMs).toISOString().split('T')[0];
-      const weekEndDate   = new Date(weekEndMs).toISOString().split('T')[0];
-
+    if (seed_week) {
       const getLogged = db.prepare(`
         SELECT ls.weight_used, ls.reps_done
         FROM logged_sets ls
         JOIN sessions s ON s.id = ls.session_id
         WHERE ls.exercise_id = ? AND ls.set_num = ?
           AND ls.skipped = 0 AND ls.reps_done IS NOT NULL
-          AND s.date >= ? AND s.date <= ?
-        ORDER BY s.date DESC, ls.id DESC
+          AND s.plan_id = ? AND s.week_num = ?
+        ORDER BY ls.id DESC
         LIMIT 1
       `);
       const getTarget = db.prepare(`
         SELECT weight, reps FROM set_targets
-        WHERE exercise_id = ? AND set_num = ? AND valid_from <= ? AND plan_id IS ?
+        WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
         ORDER BY valid_from DESC LIMIT 1
       `);
       for (const slot of srcSlots) {
         for (let setNum = 1; setNum <= slot.set_count; setNum++) {
-          const logged = getLogged.get(slot.exercise_id, setNum, weekStartDate, weekEndDate);
+          const logged = getLogged.get(slot.exercise_id, setNum, src.id, seed_week);
           if (logged) {
             insTarget.run(slot.exercise_id, setNum, logged.weight_used, logged.reps_done, newId);
           } else {
-            const target = getTarget.get(slot.exercise_id, setNum, weekStartDate, src.id);
+            const target = getTarget.get(slot.exercise_id, setNum, src.id);
             if (target) insTarget.run(slot.exercise_id, setNum, target.weight, target.reps, newId);
           }
         }
@@ -213,69 +229,80 @@ router.delete('/:id/schedule/:slotId', (req, res) => {
 });
 
 // ── Calendar ──────────────────────────────────────────────────────────────────
+// Position-based: sessions are identified by (plan_id, week_num, session_dow).
+// Dates only appear on cells where a session has already been opened.
 
 router.get('/:id/calendar', (req, res) => {
   const plan = db.prepare('SELECT * FROM workout_plans WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-  if (!plan?.started_at) return res.json({ weeks: [] });
+  if (!plan) return res.status(404).json({ error: 'Not found' });
 
   const workoutDays = getPlanDays(plan.id);
   if (workoutDays.length === 0) return res.json({ weeks: [] });
 
-  function parseDayMs(str) {
-    const [y, m, d] = str.split('-').map(Number);
-    return Date.UTC(y, m - 1, d);
-  }
-  function msToDateStr(ms) { return new Date(ms).toISOString().split('T')[0]; }
-  function msToDow(ms)     { return (new Date(ms).getUTCDay() + 6) % 7; }
+  const weekCount = plan.week_count ?? 4;
+  const userId    = req.user.id;
+  const planId    = plan.id;
 
-  const todayStr    = msToDateStr(Date.now());
-  const startMs     = parseDayMs(plan.started_at);
-  const todayMs     = parseDayMs(todayStr);
-  const DAY_MS      = 86400000;
-
-  const startDow    = msToDow(startMs);
-  const weekBaseMs  = startMs - startDow * DAY_MS;
-
-  const daysSince   = Math.max(0, Math.floor((todayMs - weekBaseMs) / DAY_MS));
-  const currentWeek = Math.floor(daysSince / 7);
-  const weeksToShow = Math.max(plan.week_count ?? 4, currentWeek + 2);
-
-  const getSession = db.prepare(`
-    SELECT s.id, s.checked_in,
+  const getSlotSession = db.prepare(`
+    SELECT s.id, s.checked_in, s.date,
            COUNT(DISTINCT ls.exercise_id) as exercise_count,
            COUNT(DISTINCT CASE WHEN ls.skipped = 0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
-             THEN ls.exercise_id END) as logged_count
+             THEN ls.exercise_id END) as logged_count,
+           (SELECT COALESCE(SUM(sc.set_count), 0) FROM schedule sc
+            WHERE sc.plan_id = s.plan_id AND sc.day_of_week = s.session_dow) as expected_sets,
+           (SELECT COUNT(*) FROM logged_sets ls2
+            WHERE ls2.session_id = s.id AND (ls2.skipped = 1 OR ls2.reps_done IS NOT NULL)) as done_sets
     FROM sessions s
     LEFT JOIN logged_sets ls ON ls.session_id = s.id
-    WHERE s.date = ? AND s.user_id = ?
+    WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
     GROUP BY s.id
   `);
 
+  const slotDone = s => s && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
+
+  const getWeekDates = db.prepare(`
+    SELECT MIN(date) as start_date, MAX(date) as end_date
+    FROM sessions
+    WHERE plan_id = ? AND week_num = ? AND user_id = ? AND date IS NOT NULL
+  `);
+
+  // Pre-compute scheduled exercise count per workout day (same across all weeks)
+  const getScheduledCount = db.prepare(
+    'SELECT COUNT(DISTINCT exercise_id) as n FROM schedule WHERE plan_id = ? AND day_of_week = ?'
+  );
+  const scheduledCounts = {};
+  for (const d of workoutDays) scheduledCounts[d] = getScheduledCount.get(planId, d)?.n ?? 0;
+
+  // Find current slot: first (week_num, session_dow) not yet workout-complete
+  const dayLen = workoutDays.length;
+  let currentWeek = null, currentDow = null;
+  outer: for (let w = 1; w <= weekCount; w++) {
+    for (const d of workoutDays) {
+      const s = getSlotSession.get(planId, w, d, userId);
+      if (!slotDone(s)) { currentWeek = w; currentDow = d; break outer; }
+    }
+  }
+  const curIdx = currentWeek != null
+    ? (currentWeek - 1) * dayLen + workoutDays.indexOf(currentDow)
+    : Infinity;
+
   const weeks = [];
-  for (let w = 0; w < weeksToShow; w++) {
+  for (let w = 1; w <= weekCount; w++) {
     const days = [];
-    for (let d = 0; d < 7; d++) {
-      const dateMs  = weekBaseMs + (w * 7 + d) * DAY_MS;
-      if (dateMs < startMs) continue;
-      const dow     = msToDow(dateMs);
-      if (!workoutDays.includes(dow)) continue;
-      const dateStr = msToDateStr(dateMs);
+    for (const d of workoutDays) {
+      const s      = getSlotSession.get(planId, w, d, userId);
+      const reqIdx = (w - 1) * dayLen + workoutDays.indexOf(d);
       days.push({
-        date:        dateStr,
-        day_of_week: dow,
-        is_past:     dateStr < todayStr,
-        is_today:    dateStr === todayStr,
-        session:     getSession.get(dateStr, req.user.id) ?? null,
+        day_of_week:     d,
+        date:            s?.date ?? null,
+        is_current:      currentWeek === w && currentDow === d,
+        is_locked:       reqIdx > curIdx,
+        scheduled_count: scheduledCounts[d],
+        session:         s ? { id: s.id, checked_in: s.checked_in, exercise_count: s.exercise_count, logged_count: s.logged_count } : null,
       });
     }
-    if (days.length) {
-      weeks.push({
-        week_num:   w + 1,
-        start_date: msToDateStr(weekBaseMs + w * 7 * DAY_MS),
-        end_date:   msToDateStr(weekBaseMs + (w * 7 + 6) * DAY_MS),
-        days,
-      });
-    }
+    const dates = getWeekDates.get(planId, w, userId);
+    weeks.push({ week_num: w, start_date: dates?.start_date ?? null, end_date: dates?.end_date ?? null, days });
   }
 
   res.json({ weeks });

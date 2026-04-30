@@ -55,12 +55,17 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    date       TEXT    NOT NULL UNIQUE,
-    pain       TEXT,
-    recovery   TEXT,
-    pump       TEXT,
-    checked_in INTEGER NOT NULL DEFAULT 0
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date        TEXT,
+    week_num    INTEGER,
+    session_dow INTEGER,
+    pain        TEXT,
+    recovery    TEXT,
+    pump        TEXT,
+    checked_in  INTEGER NOT NULL DEFAULT 0,
+    plan_id     INTEGER REFERENCES workout_plans(id),
+    user_id     INTEGER REFERENCES users(id),
+    UNIQUE(plan_id, week_num, session_dow, user_id)
   );
 
   CREATE TABLE IF NOT EXISTS logged_sets (
@@ -149,6 +154,69 @@ if (!cols('sessions').includes('user_id')) {
     DROP TABLE sessions;
     ALTER TABLE sessions_new RENAME TO sessions;
   `);
+  db.pragma('foreign_keys = ON');
+}
+
+// ── Recreate sessions with week_num / session_dow ────────────────────────────
+// Replaces date-based identity with position-based (week_num, session_dow).
+
+if (!cols('sessions').includes('week_num')) {
+  db.pragma('foreign_keys = OFF');
+
+  const existing = db.prepare('SELECT * FROM sessions').all();
+  const planMap  = {};
+  for (const p of db.prepare('SELECT id, started_at FROM workout_plans').all())
+    planMap[p.id] = p;
+
+  function dowOfDate(s) {
+    const [y, m, d] = s.split('-').map(Number);
+    return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  }
+  function weekNumOfDate(dateStr, startedAt) {
+    const [y1, m1, d1] = dateStr.split('-').map(Number);
+    const [y2, m2, d2] = startedAt.split('-').map(Number);
+    const sessMs  = Date.UTC(y1, m1 - 1, d1);
+    const startMs = Date.UTC(y2, m2 - 1, d2);
+    const base    = startMs - ((new Date(startMs).getUTCDay() + 6) % 7) * 86400000;
+    return Math.max(1, Math.floor((sessMs - base) / (7 * 86400000)) + 1);
+  }
+
+  db.exec(`
+    CREATE TABLE sessions_new (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      date        TEXT,
+      week_num    INTEGER,
+      session_dow INTEGER,
+      pain        TEXT,
+      recovery    TEXT,
+      pump        TEXT,
+      checked_in  INTEGER NOT NULL DEFAULT 0,
+      plan_id     INTEGER REFERENCES workout_plans(id),
+      user_id     INTEGER REFERENCES users(id),
+      UNIQUE(plan_id, week_num, session_dow, user_id)
+    );
+  `);
+
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO sessions_new
+      (id, date, week_num, session_dow, pain, recovery, pump, checked_in, plan_id, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  db.transaction(() => {
+    for (const s of existing) {
+      let weekNum = null, sessionDow = null;
+      if (s.date) {
+        sessionDow = dowOfDate(s.date);
+        const plan = s.plan_id ? planMap[s.plan_id] : null;
+        weekNum    = plan?.started_at ? weekNumOfDate(s.date, plan.started_at) : 1;
+      }
+      ins.run(s.id, s.date ?? null, weekNum, sessionDow,
+              s.pain, s.recovery, s.pump, s.checked_in,
+              s.plan_id ?? null, s.user_id ?? null);
+    }
+  })();
+
+  db.exec(`DROP TABLE sessions; ALTER TABLE sessions_new RENAME TO sessions;`);
   db.pragma('foreign_keys = ON');
 }
 

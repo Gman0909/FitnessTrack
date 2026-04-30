@@ -420,7 +420,7 @@ function CalendarTab({ planId, weekCount, onWeekCountChange }) {
                 Week {week.week_num}
               </div>
               <div style={{ fontSize: '0.65rem', color: 'var(--dim)', opacity: 0.7 }}>
-                {week.start_date.slice(5)}
+                {week.start_date ? week.start_date.slice(5) : ''}
               </div>
             </div>
           ))}
@@ -444,27 +444,31 @@ function CalendarTab({ planId, weekCount, onWeekCountChange }) {
                 );
               }
 
-              const completed = day.session?.checked_in === 1;
-              const partial   = !completed && (day.session?.logged_count ?? 0) > 0;
-              const isPast    = day.is_past && !day.is_today;
-              const isToday   = day.is_today;
-              const missed    = isPast && !completed && !partial && !day.session;
+              const loggedCount   = day.session?.logged_count ?? 0;
+              const exerciseCount = day.session?.exercise_count ?? 0;
+              const scheduled     = day.scheduled_count ?? 0;
+              const completed     = loggedCount > 0 && loggedCount === scheduled;
+              const allSkipped    = !completed && exerciseCount > 0 && loggedCount === 0 && exerciseCount === scheduled;
+              const partial       = !completed && !allSkipped && exerciseCount > 0;
+              const isCurrent  = day.is_current;
+              const isLocked   = day.is_locked;
 
               let bg        = 'var(--surface)';
               let border    = '1px solid var(--border)';
               let textColor = 'var(--muted)';
               let opacity   = 1;
 
-              if (completed) { bg = '#1e3b1e'; border = '1px solid #2d5a2d'; textColor = 'var(--success)'; }
-              if (partial)   { bg = '#2a1c00'; border = '1px solid #5a3c00'; textColor = '#f0a030'; }
-              if (isToday)   { border = '2px solid var(--text)'; textColor = 'var(--text)'; }
-              if (missed)    { opacity = 0.35; }
+              if (completed)  { bg = '#1e3b1e'; border = '1px solid #2d5a2d'; textColor = 'var(--success)'; }
+              if (partial)    { bg = '#2a1c00'; border = '1px solid #5a3c00'; textColor = '#f0a030'; }
+              if (allSkipped) { bg = '#2a0a0a'; border = '1px solid #5a1a1a'; textColor = 'var(--danger)'; }
+              if (isCurrent)  { border = '2px solid var(--text)'; textColor = 'var(--text)'; }
+              if (isLocked)  { border = '1px dashed var(--border)'; opacity = 0.5; }
 
               return (
                 <div key={week.week_num}
                   style={{ width: COL, flexShrink: 0, height: '44px', marginLeft: '8px', borderRadius: '8px', background: bg, border, opacity, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: isToday || completed ? '600' : 'normal', color: textColor }}>
-                    {completed ? '✓✓' : partial ? '✓' : isToday ? '▶' : DAY_SHORT[dow]}
+                  <span style={{ fontSize: '0.78rem', fontWeight: isCurrent || completed ? '600' : 'normal', color: textColor }}>
+                    {completed ? '✓✓' : allSkipped ? '✗' : partial ? '✓' : isCurrent ? '▶' : DAY_SHORT[dow]}
                   </span>
                   {day.date && (
                     <span style={{ fontSize: '0.6rem', color: textColor, opacity: 0.7 }}>{day.date.slice(5)}</span>

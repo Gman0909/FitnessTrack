@@ -11,8 +11,9 @@ async function req(method, path, body) {
 
 export const api = {
   // Sessions
-  getToday:          ()         => req('GET',    '/sessions/today'),
-  getSessionForDate: (date)     => req('GET',    `/sessions/date/${date}`),
+  getToday:           ()                   => req('GET', '/sessions/today'),
+  getSessionForDate:  (date)               => req('GET', `/sessions/date/${date}`),
+  getSessionForSlot:  (planId, week, dow)  => req('GET', `/sessions/slot?plan_id=${planId}&week=${week}&dow=${dow}`),
   skipSession:       (id)       => req('POST',   `/sessions/${id}/skip`),
   getSessionSets:    (id)       => req('GET',    `/sessions/${id}/sets`),
   logSet:            (id, body) => req('POST',   `/sessions/${id}/sets`, body),

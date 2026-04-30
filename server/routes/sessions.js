@@ -6,23 +6,69 @@ const router = Router();
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
-function getOrCreateSession(date, userId) {
-  let session = db.prepare('SELECT * FROM sessions WHERE date = ? AND user_id = ?').get(date, userId);
-  if (!session) {
-    const activePlan = db.prepare('SELECT id FROM workout_plans WHERE is_active = 1 AND user_id = ?').get(userId);
-    const { lastInsertRowid } = db.prepare('INSERT INTO sessions (date, plan_id, user_id) VALUES (?, ?, ?)')
-      .run(date, activePlan?.id ?? null, userId);
+// ── Slot endpoint — position-based session access ─────────────────────────────
+// Returns { session, is_current, is_locked } for (plan_id, week_num, session_dow).
+// Creates the session (with today's date) only when accessing the current slot.
+
+router.get('/slot', (req, res) => {
+  const { plan_id, week, dow } = req.query;
+  if (!plan_id || week == null || dow == null)
+    return res.status(400).json({ error: 'Missing params' });
+
+  const planId     = parseInt(plan_id, 10);
+  const weekNum    = parseInt(week,    10);
+  const sessionDow = parseInt(dow,     10);
+  const userId     = req.user.id;
+
+  const plan = db.prepare('SELECT * FROM workout_plans WHERE id = ? AND user_id = ?').get(planId, userId);
+  if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+  const planDays = db.prepare(
+    'SELECT day_of_week FROM plan_days WHERE plan_id = ? ORDER BY day_of_week'
+  ).all(planId).map(r => r.day_of_week);
+
+  if (!planDays.includes(sessionDow))
+    return res.status(400).json({ error: 'Day not in plan' });
+
+  const getSlotSession = db.prepare(`
+    SELECT s.*,
+      (SELECT COALESCE(SUM(sc.set_count), 0) FROM schedule sc
+       WHERE sc.plan_id = s.plan_id AND sc.day_of_week = s.session_dow) as expected_sets,
+      (SELECT COUNT(*) FROM logged_sets ls
+       WHERE ls.session_id = s.id AND (ls.skipped = 1 OR ls.reps_done IS NOT NULL)) as done_sets
+    FROM sessions s
+    WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
+  `);
+
+  const slotDone = s => s && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
+
+  // Find current slot: first (week, dow) in sequence not yet workout-complete
+  const maxScan   = Math.max(plan.week_count ?? 4, weekNum) + 1;
+  let currentWeek = null, currentDow = null;
+  outer: for (let w = 1; w <= maxScan; w++) {
+    for (const d of planDays) {
+      const s = getSlotSession.get(planId, w, d, userId);
+      if (!slotDone(s)) { currentWeek = w; currentDow = d; break outer; }
+    }
+  }
+
+  // Determine slot position relative to current
+  const dayLen   = planDays.length;
+  const reqIdx   = (weekNum - 1) * dayLen + planDays.indexOf(sessionDow);
+  const curIdx   = currentWeek != null ? (currentWeek - 1) * dayLen + planDays.indexOf(currentDow) : Infinity;
+  const isCurrent = currentWeek === weekNum && currentDow === sessionDow;
+  const isLocked  = reqIdx > curIdx;
+
+  let session = getSlotSession.get(planId, weekNum, sessionDow, userId);
+
+  if (!session && !isLocked) {
+    const { lastInsertRowid } = db.prepare(
+      'INSERT INTO sessions (date, week_num, session_dow, plan_id, user_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(todayStr(), weekNum, sessionDow, planId, userId);
     session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(lastInsertRowid);
   }
-  return session;
-}
 
-router.get('/today', (req, res) => { res.json(getOrCreateSession(todayStr(), req.user.id)); });
-
-router.get('/date/:date', (req, res) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.date))
-    return res.status(400).json({ error: 'Invalid date format' });
-  res.json(getOrCreateSession(req.params.date, req.user.id));
+  res.json({ session: session ?? null, is_current: isCurrent, is_locked: isLocked });
 });
 
 router.post('/:id/skip', (req, res) => {
@@ -30,17 +76,19 @@ router.post('/:id/skip', (req, res) => {
   const session   = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
 
-  const dayDate    = new Date(session.date + 'T00:00:00');
-  const dow        = (dayDate.getDay() + 6) % 7;
-  const activePlan = db.prepare('SELECT id FROM workout_plans WHERE is_active = 1 AND user_id = ?').get(req.user.id);
+  const dow    = session.session_dow ?? (() => {
+    const d = new Date(session.date + 'T00:00:00');
+    return (d.getDay() + 6) % 7;
+  })();
+  const planId = session.plan_id;
 
   db.transaction(() => {
-    if (activePlan) {
+    if (planId) {
       const slots = db.prepare(`
         SELECT s.set_count, e.id as exercise_id
         FROM schedule s JOIN exercises e ON e.id = s.exercise_id
         WHERE s.day_of_week = ? AND s.plan_id = ?
-      `).all(dow, activePlan.id);
+      `).all(dow, planId);
       const ins = db.prepare(`
         INSERT OR IGNORE INTO logged_sets (session_id, exercise_id, set_num, reps_done, skipped, weight_used)
         VALUES (?, ?, ?, NULL, 1, NULL)

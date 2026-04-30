@@ -27,17 +27,10 @@ function groupByMuscle(exercises) {
   return order.map(mg => ({ muscle_group: mg, exercises: map.get(mg) }));
 }
 
-function todayStr() { return new Date().toISOString().split('T')[0]; }
-
-// Parse date string safely at UTC noon so local timezone can't shift the day
-function dateFromStr(str) {
-  const [y, m, d] = str.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-}
-function dowFromStr(str) { return (dateFromStr(str).getUTCDay() + 6) % 7; }
-
 function fmtDate(dateStr) {
-  return dateFromStr(dateStr).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 // ── Muscle group badge ─────────────────────────────────────────────────────────
@@ -88,8 +81,8 @@ function EndOfPlanModal({ plan, calendarData, onClone, onClose }) {
   const [seedWeek, setSeedWeek] = useState(null);
   const [cloning, setCloning]   = useState(false);
 
-  const pastWeeks = calendarData?.weeks?.filter(w =>
-    w.days.some(d => d.session?.checked_in === 1)
+  const completedWeeks = calendarData?.weeks?.filter(w =>
+    w.days.some(d => (d.session?.exercise_count ?? 0) > 0)
   ) ?? [];
 
   async function handleClone() {
@@ -128,18 +121,18 @@ function EndOfPlanModal({ plan, calendarData, onClone, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button onClick={() => setStep('prompt')}
             style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, fontSize: '1rem', lineHeight: 1 }}>←</button>
-          <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1rem', fontWeight: '700' }}>Seed starting weights from</h3>
+          <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1rem', fontWeight: '700' }}>Pick up weights from</h3>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <button onClick={() => setSeedWeek(null)} style={optBtn(seedWeek === null)}>Current targets</button>
-          {pastWeeks.map(w => (
+          <button onClick={() => setSeedWeek(null)} style={optBtn(seedWeek === null)}>Original starting weights</button>
+          {completedWeeks.map(w => (
             <button key={w.week_num} onClick={() => setSeedWeek(w.week_num)} style={optBtn(seedWeek === w.week_num)}>
               Week {w.week_num}
-              <span style={{ opacity: 0.65, fontWeight: 'normal' }}> · {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span>
+              {w.start_date && w.end_date && <span style={{ opacity: 0.65, fontWeight: 'normal' }}> · {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span>}
             </button>
           ))}
-          {pastWeeks.length === 0 && (
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--dim)' }}>No past weeks to seed from.</p>
+          {completedWeeks.length === 0 && (
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--dim)' }}>No completed weeks to seed from.</p>
           )}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -159,7 +152,7 @@ function EndOfPlanModal({ plan, calendarData, onClone, onClose }) {
 
 // ── Day picker panel ──────────────────────────────────────────────────────────
 
-function DayPickerPanel({ calendarData, selectedDate, onSelect, weekCount, onDecreaseWeek, onIncreaseWeek }) {
+function DayPickerPanel({ calendarData, selectedSlot, onSelect, weekCount, onDecreaseWeek, onIncreaseWeek }) {
   if (!calendarData?.weeks?.length) return (
     <div style={{ padding: '0.75rem 0', marginBottom: '1rem', color: 'var(--muted)', fontSize: '0.875rem' }}>
       No active plan. Set one up in the Schedule tab.
@@ -213,29 +206,35 @@ function DayPickerPanel({ calendarData, selectedDate, onSelect, weekCount, onDec
               const day = lookup[week.week_num]?.[dow];
               if (!day) return <div key={week.week_num} style={{ width: COL, height: 40, flexShrink: 0, marginLeft: '6px' }} />;
 
-              const completed  = day.session?.checked_in === 1;
-              const partial    = !completed && (day.session?.logged_count ?? 0) > 0;
-              const isSelected = day.date === selectedDate;
-              const isPastMissed = day.is_past && !completed && !partial;
+              const loggedCount   = day.session?.logged_count ?? 0;
+              const exerciseCount = day.session?.exercise_count ?? 0;
+              const scheduled     = day.scheduled_count ?? 0;
+              const completed     = loggedCount > 0 && loggedCount === scheduled;
+              const allSkipped    = !completed && exerciseCount > 0 && loggedCount === 0 && exerciseCount === scheduled;
+              const partial       = !completed && !allSkipped && exerciseCount > 0;
+              const isSelected = selectedSlot?.weekNum === week.week_num && selectedSlot?.dow === dow;
+              const isLocked   = day.is_locked;
+              const isCurrent  = day.is_current;
 
               let bg = 'var(--surface2)', borderStyle = '1px solid var(--border)', textColor = 'var(--muted)';
               let opacity = 1, fontWeight = 'normal';
 
-              if (completed)    { bg = '#1a2e1a'; borderStyle = '1px solid #2d5a2d'; textColor = '#4caf50'; }
-              if (partial)      { bg = '#2a1c00'; borderStyle = '1px solid #5a3c00'; textColor = '#f0a030'; }
-              if (day.is_today && !isSelected) { borderStyle = '1px solid #555'; textColor = completed ? '#4caf50' : partial ? '#f0a030' : 'var(--text)'; }
-              if (isSelected)   { bg = completed ? '#1e3b1e' : partial ? '#3a2800' : 'var(--surface3)'; borderStyle = '2px solid var(--text)'; textColor = 'var(--text)'; fontWeight = '700'; }
-              if (isPastMissed && !isSelected) { opacity = 0.45; }
+              if (completed)  { bg = '#1a2e1a'; borderStyle = '1px solid #2d5a2d'; textColor = '#4caf50'; }
+              if (partial)    { bg = '#2a1c00'; borderStyle = '1px solid #5a3c00'; textColor = '#f0a030'; }
+              if (allSkipped) { bg = '#2a0a0a'; borderStyle = '1px solid #5a1a1a'; textColor = 'var(--danger)'; }
+              if (isCurrent && !isSelected) { borderStyle = '1px solid #555'; textColor = 'var(--text)'; }
+              if (isSelected) { bg = completed ? '#1e3b1e' : allSkipped ? '#3a0a0a' : partial ? '#3a2800' : 'var(--surface3)'; borderStyle = '2px solid var(--text)'; textColor = 'var(--text)'; fontWeight = '700'; }
+              if (isLocked && !isSelected) { borderStyle = '1px dashed var(--border)'; opacity = 0.55; }
 
-              const label = completed ? '✓✓' : partial ? '✓' : day.is_today && !isSelected ? '▶' : DAY_SHORT[dow];
+              const label = completed ? '✓✓' : allSkipped ? '✗' : partial ? '✓' : isCurrent && !isSelected ? '▶' : DAY_SHORT[dow];
 
               return (
                 <div key={week.week_num}
-                  onClick={() => onSelect(day.date)}
+                  onClick={() => onSelect({ weekNum: week.week_num, dow })}
                   style={{ width: COL, height: 40, flexShrink: 0, marginLeft: '6px', borderRadius: '7px', background: bg, border: borderStyle, opacity, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px', transition: 'background 0.1s' }}
                 >
                   <span style={{ fontSize: '0.75rem', fontWeight, color: textColor }}>{label}</span>
-                  <span style={{ fontSize: '0.58rem', color: textColor, opacity: 0.65 }}>{day.date.slice(5)}</span>
+                  <span style={{ fontSize: '0.58rem', color: textColor, opacity: 0.65 }}>{day.date ? day.date.slice(5) : ''}</span>
                 </div>
               );
             })}
@@ -359,7 +358,7 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
 
 // ── Set row ────────────────────────────────────────────────────────────────────
 
-function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone, onResetCheckin, onValuesChange, resetCounter = 0, initialStatus = 'idle', initialReps = '', isBodyweight = false, bodyweightStr = '' }) {
+function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone, onResetCheckin, onValuesChange, resetCounter = 0, initialStatus = 'idle', initialReps = '', isBodyweight = false, bodyweightStr = '', isReadOnly = false }) {
   const { unit, toKg } = useUnit();
 
   // Initialise weight in the user's display unit so they edit in familiar numbers
@@ -387,6 +386,7 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
   }
 
   async function handleLog() {
+    if (isReadOnly) return;
     if (status === 'logged') { setStatus('idle'); onUndone(); triggerReset(); return; }
     const repsDone = parseInt(reps, 10);
     if (!repsDone || repsDone < 1) return;
@@ -399,6 +399,7 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
   }
 
   async function handleSkip() {
+    if (isReadOnly) return;
     if (status === 'skipped') { setStatus('idle'); onUndone(); triggerReset(); return; }
     await api.logSet(sessionId, { exercise_id: exerciseId, set_num: set.set_num, reps_done: null, skipped: 1, weight_used: null });
     setStatus('skipped');
@@ -416,33 +417,36 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       <div style={{ ...pill, color:'var(--dim)', gridColumn: isBodyweight ? '1/2' : '1/3', justifyContent:'flex-start', paddingLeft:'0.75rem' }}>
         <span style={{ fontSize:'0.85rem', color:'var(--dim)' }}>Set {set.set_num} — Skipped</span>
-        <button type="button" onClick={handleSkip} style={{ marginLeft:'auto', marginRight:'0.5rem', background:'none', border:'none', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline' }}>Undo</button>
+        {!isReadOnly && <button type="button" onClick={handleSkip} style={{ marginLeft:'auto', marginRight:'0.5rem', background:'none', border:'none', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline' }}>Undo</button>}
       </div>
       <div style={{ width:'44px', height:'44px' }} />
     </div>
   );
 
-  const canLog   = status === 'logged' || (reps !== '' && parseInt(reps, 10) >= 1);
+  const canLog   = !isReadOnly && (status === 'logged' || (reps !== '' && parseInt(reps, 10) >= 1));
   const isLogged = status === 'logged';
   const inputStyle = { ...pill, width:'100%', color:'var(--text)', outline:'none', textAlign:'center', padding:0,
-    borderColor: isLogged ? 'var(--success)' : 'var(--border)' };
+    borderColor: isLogged ? 'var(--success)' : 'var(--border)', opacity: isReadOnly ? 0.6 : 1 };
 
   return (
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       {!isBodyweight && (
         <input type="number" value={weight} onChange={e => handleWeightChange(e.target.value)}
           placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
+          disabled={isReadOnly}
           style={inputStyle}
         />
       )}
       <input type="number" value={reps} onChange={e => handleRepsChange(e.target.value)}
         placeholder={String(set.reps)} min="1" max="999"
+        disabled={isReadOnly}
         style={inputStyle}
       />
       <div onClick={canLog ? handleLog : undefined}
-        style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0, cursor: canLog ? 'pointer' : 'default',
+        style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0,
+          cursor: isReadOnly ? 'default' : canLog ? 'pointer' : 'default',
           border:`2px solid ${isLogged ? 'var(--success)' : canLog ? 'var(--muted)' : 'var(--border)'}`,
-          background: isLogged ? '#1a2e1a' : 'transparent',
+          background: isLogged ? '#1a2e1a' : 'transparent', opacity: isReadOnly && !isLogged ? 0.4 : 1,
           display:'flex', alignItems:'center', justifyContent:'center', transition:'border-color 0.15s, background 0.15s' }}>
         {isLogged && <span style={{ color:'var(--success)', fontSize:'1.3rem', lineHeight:1 }}>✓</span>}
       </div>
@@ -565,7 +569,7 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
 // ── Exercise card ──────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetUndone, onResetCheckin, onAddSet, onRemoveSet, onSetValuesChange, resetCounter, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, doneSet, initials, isBodyweight = false, bodyweightStr = '', onBodyweightChange }) {
+function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetUndone, onResetCheckin, onAddSet, onRemoveSet, onSetValuesChange, resetCounter, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, doneSet, initials, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
   const { unit, display } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
@@ -663,22 +667,25 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
             initialReps={init?.reps ?? ''}
             isBodyweight={isBodyweight}
             bodyweightStr={bodyweightStr}
+            isReadOnly={isReadOnly}
           />
         );
       })}
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid var(--border)' }}>
         <span style={{ fontSize:'0.72rem', color:'var(--muted)', letterSpacing:'0.01em' }}>{progressHint ?? ''}</span>
-        <div style={{ display:'flex', gap:'0.4rem' }}>
-          <button type="button" onClick={onRemoveSet} disabled={exercise.sets.length <= 1 || lastSetDone}
-            style={{ padding:'0.2rem 0.65rem', background:'none', border:'1px solid var(--border)', borderRadius:'4px', color: exercise.sets.length <= 1 || lastSetDone ? 'var(--border)' : 'var(--dim)', fontSize:'0.8rem', cursor: exercise.sets.length <= 1 || lastSetDone ? 'default' : 'pointer' }}>
-            − set
-          </button>
-          <button type="button" onClick={onAddSet}
-            style={{ padding:'0.2rem 0.65rem', background:'none', border:'1px solid var(--border)', borderRadius:'4px', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer' }}>
-            + set
-          </button>
-        </div>
+        {!isReadOnly && (
+          <div style={{ display:'flex', gap:'0.4rem' }}>
+            <button type="button" onClick={onRemoveSet} disabled={exercise.sets.length <= 1 || lastSetDone}
+              style={{ padding:'0.2rem 0.65rem', background:'none', border:'1px solid var(--border)', borderRadius:'4px', color: exercise.sets.length <= 1 || lastSetDone ? 'var(--border)' : 'var(--dim)', fontSize:'0.8rem', cursor: exercise.sets.length <= 1 || lastSetDone ? 'default' : 'pointer' }}>
+              − set
+            </button>
+            <button type="button" onClick={onAddSet}
+              style={{ padding:'0.2rem 0.65rem', background:'none', border:'1px solid var(--border)', borderRadius:'4px', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer' }}>
+              + set
+            </button>
+          </div>
+        )}
       </div>
 
       {historyOpen && (
@@ -697,8 +704,12 @@ export default function TodayPage() {
   // Plan & navigation
   const [activePlan, setActivePlan]   = useState(null);
   const [calendarData, setCalendarData] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState(null); // { weekNum, dow }
   const [calendarOpen, setCalendarOpen] = useState(false);
+
+  // Slot state
+  const [isLocked, setIsLocked]   = useState(false);
+  const [isCurrent, setIsCurrent] = useState(false);
 
   // Week count (mirrors activePlan.week_count, updated optimistically)
   const [weekCount, setWeekCount]           = useState(null);
@@ -735,7 +746,7 @@ export default function TodayPage() {
   const [sessLoading, setSessLoading] = useState(false);
   const [error, setError]           = useState(null);
 
-  // ── Step 1: load plan + calendar, pick default date ──────────────────────────
+  // ── Step 1: load plan + calendar, pick default slot ──────────────────────────
 
   useEffect(() => {
     async function init() {
@@ -746,14 +757,13 @@ export default function TodayPage() {
       const calData = await api.getPlanCalendar(plan.id);
       setCalendarData(calData);
 
-      const allDays = calData.weeks.flatMap(w => w.days).sort((a, b) => a.date.localeCompare(b.date));
+      // Flatten all slots with weekNum embedded; pick the current slot (▶) first
+      const allSlots = calData.weeks.flatMap(w =>
+        w.days.map(d => ({ weekNum: w.week_num, dow: d.day_of_week, is_current: d.is_current }))
+      );
+      const def = allSlots.find(s => s.is_current) ?? allSlots[allSlots.length - 1];
 
-      // Default: first workout slot that hasn't been completed yet (ignore actual date)
-      let def = allDays.find(d => !(d.session?.checked_in === 1));
-      // Fallback: last day in calendar
-      if (!def) def = allDays[allDays.length - 1];
-
-      if (def) setSelectedDate(def.date);
+      if (def) setSelectedSlot({ weekNum: def.weekNum, dow: def.dow });
       else setLoading(false);
     }
     init().catch(e => { setError(e.message); setLoading(false); });
@@ -763,12 +773,12 @@ export default function TodayPage() {
     if (activePlan) setWeekCount(activePlan.week_count ?? 4);
   }, [activePlan?.id]); // eslint-disable-line
 
-  // ── Step 2: load session + exercises when selected date changes ───────────────
+  // ── Step 2: load session + exercises when selected slot changes ──────────────
 
   useEffect(() => {
-    if (!selectedDate || !activePlan) return;
+    if (!selectedSlot || !activePlan) return;
 
-    async function loadDay() {
+    async function loadSlot() {
       liveValues.current.clear();
       setSessLoading(true);
       setDoneSet(new Set());
@@ -778,30 +788,36 @@ export default function TodayPage() {
       setDragExId(null);
       setDragOverId(null);
 
-      const dow = dowFromStr(selectedDate);
-      const [sess, exs] = await Promise.all([
-        api.getSessionForDate(selectedDate),
+      const { weekNum, dow } = selectedSlot;
+      const [slotData, exs] = await Promise.all([
+        api.getSessionForSlot(activePlan.id, weekNum, dow),
         api.getScheduleForDay(dow),
       ]);
+
+      const { session: sess, is_locked, is_current } = slotData;
       setSession(sess);
+      setIsLocked(is_locked);
+      setIsCurrent(is_current);
       setExercises(exs);
 
-      const [loggedSets, checkinGroups] = await Promise.all([
-        api.getSessionSets(sess.id),
-        api.getCheckins(sess.id),
-      ]);
-
-      const initMap = new Map();
+      const initMap  = new Map();
       const initDone = new Set();
-      for (const ls of loggedSets) {
-        const key = `${ls.exercise_id}-${ls.set_num}`;
-        if (ls.skipped) { initMap.set(key, { status: 'skipped', reps: '' }); initDone.add(key); }
-        else if (ls.reps_done != null) { initMap.set(key, { status: 'logged', reps: String(ls.reps_done) }); initDone.add(key); }
+      const checkinSet = new Set();
+
+      if (sess) {
+        const [loggedSets, checkinGroups] = await Promise.all([
+          api.getSessionSets(sess.id),
+          api.getCheckins(sess.id),
+        ]);
+        for (const ls of loggedSets) {
+          const key = `${ls.exercise_id}-${ls.set_num}`;
+          if (ls.skipped) { initMap.set(key, { status: 'skipped', reps: '' }); initDone.add(key); }
+          else if (ls.reps_done != null) { initMap.set(key, { status: 'logged', reps: String(ls.reps_done) }); initDone.add(key); }
+        }
+        for (const g of checkinGroups) checkinSet.add(g);
       }
 
-      // Pre-dismiss groups whose sets are all already logged/skipped so the
-      // check-in modal doesn't fire immediately when switching to a past day.
-      const checkinSet = new Set(checkinGroups);
+      // Pre-dismiss groups that are fully done so check-in modal doesn't fire on past slots
       const preDismissed = new Set();
       for (const g of groupByMuscle(exs)) {
         if (!checkinSet.has(g.muscle_group)) {
@@ -812,8 +828,9 @@ export default function TodayPage() {
         }
       }
 
-      const storedBW = localStorage.getItem(`ft_bodyweight_${selectedDate}`) ?? localStorage.getItem('ft_bodyweight') ?? '';
-      const bwMap = new Map();
+      const bwKey    = `ft_bodyweight_${weekNum}_${dow}`;
+      const storedBW = localStorage.getItem(bwKey) ?? localStorage.getItem('ft_bodyweight') ?? '';
+      const bwMap    = new Map();
       for (const ex of exs) {
         if (ex.equipment === 'bodyweight') bwMap.set(ex.exercise_id, storedBW);
       }
@@ -827,8 +844,8 @@ export default function TodayPage() {
       setLoading(false);
     }
 
-    loadDay().catch(e => { setError(e.message); setSessLoading(false); setLoading(false); });
-  }, [selectedDate, activePlan?.id, reloadKey]); // eslint-disable-line
+    loadSlot().catch(e => { setError(e.message); setSessLoading(false); setLoading(false); });
+  }, [selectedSlot?.weekNum, selectedSlot?.dow, activePlan?.id, reloadKey]); // eslint-disable-line
 
   // ── Derived state ─────────────────────────────────────────────────────────────
 
@@ -838,15 +855,17 @@ export default function TodayPage() {
     return group.exercises.every(ex => ex.sets.every(s => doneSet.has(`${ex.exercise_id}-${s.set_num}`)));
   }
 
-  // Week / Day label — derived from the calendar so week boundaries align correctly
+  // Week / Day label from the selected slot position
   const weekDayLabel = (() => {
-    if (!calendarData?.weeks?.length || !selectedDate) return null;
-    for (const week of calendarData.weeks) {
-      const idx = week.days.findIndex(d => d.date === selectedDate);
-      if (idx >= 0) return { weekNum: week.week_num, dayNum: idx + 1 };
-    }
-    return null;
+    if (!selectedSlot || !calendarData?.weeks?.length) return null;
+    const week = calendarData.weeks.find(w => w.week_num === selectedSlot.weekNum);
+    if (!week) return null;
+    const idx = week.days.findIndex(d => d.day_of_week === selectedSlot.dow);
+    if (idx < 0) return null;
+    return { weekNum: selectedSlot.weekNum, dayNum: idx + 1 };
   })();
+
+  const isReadOnly = !isCurrent;
 
   const allDone = session?.checked_in === 1 ||
     (groups.length > 0 && groups.every(g => checkedInGroups.has(g.muscle_group)));
@@ -876,16 +895,16 @@ export default function TodayPage() {
     setPending(null);
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
 
-    // Detect end-of-plan: all groups now checked in AND this is the last calendar day
+    // Detect end-of-plan: all groups checked in AND this is the last calendar slot
     const updatedGroups = new Set([...checkedInGroups, muscleGroup]);
     if (groups.every(g => updatedGroups.has(g.muscle_group))) {
       const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
       const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
-      if (lastDay?.date === selectedDate) {
+      if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow) {
         setEndOfPlanModal(true);
       }
     }
-  }, [activePlan, groups, checkedInGroups, calendarData, selectedDate]);
+  }, [activePlan, groups, checkedInGroups, calendarData, selectedSlot]);
 
   function handleClosePending() {
     setDismissed(prev => new Set([...prev, pendingCheckin]));
@@ -980,8 +999,8 @@ export default function TodayPage() {
   // ── Bodyweight propagation ────────────────────────────────────────────────────
 
   function handleBodyweightChange(exerciseId, value) {
-    localStorage.setItem(`ft_bodyweight_${selectedDate}`, value);
-    localStorage.setItem('ft_bodyweight', value); // global fallback for new days
+    if (selectedSlot) localStorage.setItem(`ft_bodyweight_${selectedSlot.weekNum}_${selectedSlot.dow}`, value);
+    localStorage.setItem('ft_bodyweight', value); // global fallback
     setBodyweightValues(prev => {
       const next = new Map(prev);
       let found = false;
@@ -996,7 +1015,7 @@ export default function TodayPage() {
   // ── Skip helpers ──────────────────────────────────────────────────────────────
 
   async function handleSkipSession() {
-    if (!session) return;
+    if (!session || isReadOnly) return;
     await api.skipSession(session.id);
     setSession(s => ({ ...s, checked_in: 1 }));
     const allKeys = exercises.flatMap(ex => ex.sets.map(s => `${ex.exercise_id}-${s.set_num}`));
@@ -1065,11 +1084,12 @@ export default function TodayPage() {
             </div>
           )}
           <h2 style={{ margin:0, fontSize:'1.75rem', fontWeight:'800', color:'var(--text)', letterSpacing:'-0.02em', lineHeight:1.1 }}>
-            {weekDayLabel?.dayNum ? `Day ${weekDayLabel.dayNum}` : (selectedDate ? DAY_LABELS[dowFromStr(selectedDate)] : 'Today')}
+            {weekDayLabel?.dayNum ? `Day ${weekDayLabel.dayNum}` : (selectedSlot ? DAY_LABELS[selectedSlot.dow] : 'Today')}
           </h2>
           <div style={{ fontSize:'0.8rem', color:'var(--muted)', marginTop:'4px' }}>
-            {selectedDate && fmtDate(selectedDate)}
+            {session?.date ? fmtDate(session.date) : selectedSlot ? DAY_LABELS[selectedSlot.dow] : ''}
             {activePlan && <span style={{ color:'var(--dim)' }}> · {activePlan.name}</span>}
+            {isLocked && <span style={{ marginLeft:'0.5rem', fontSize:'0.72rem', color:'var(--dim)', letterSpacing:'0.05em' }}>· locked</span>}
           </div>
         </div>
         <button type="button" onClick={() => setCalendarOpen(o => !o)}
@@ -1089,8 +1109,8 @@ export default function TodayPage() {
       {calendarOpen && (
         <DayPickerPanel
           calendarData={calendarData}
-          selectedDate={selectedDate}
-          onSelect={date => { setSelectedDate(date); setCalendarOpen(false); }}
+          selectedSlot={selectedSlot}
+          onSelect={slot => { setSelectedSlot(slot); setCalendarOpen(false); }}
           weekCount={weekCount}
           onDecreaseWeek={handleDecreaseWeek}
           onIncreaseWeek={handleIncreaseWeek}
@@ -1104,9 +1124,15 @@ export default function TodayPage() {
         <p style={{ color:'var(--muted)' }}>No exercises scheduled for this day.</p>
       ) : (
         <>
+          {isReadOnly && (
+            <div style={{ marginBottom:'1rem', padding:'0.55rem 0.85rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', fontSize:'0.8rem', color:'var(--dim)' }}>
+              {isLocked ? '🔒 This session is locked — complete the current session first.' : 'Read-only view of a completed session.'}
+            </div>
+          )}
+
           {exercises.map(ex => (
             <ExerciseCard
-              key={`${session?.id}-${ex.exercise_id}`}
+              key={`${session?.id ?? `${selectedSlot?.weekNum}-${selectedSlot?.dow}`}-${ex.exercise_id}`}
               exercise={ex} sessionId={session?.id}
               isGroupCheckedIn={checkedInGroups.has(ex.muscle_group)}
               onSetDone={onSetDone} onSetUndone={onSetUndone}
@@ -1125,6 +1151,7 @@ export default function TodayPage() {
               isBodyweight={ex.equipment === 'bodyweight'}
               bodyweightStr={bodyweightValues.get(ex.exercise_id) ?? ''}
               onBodyweightChange={val => handleBodyweightChange(ex.exercise_id, val)}
+              isReadOnly={isReadOnly}
             />
           ))}
 
@@ -1132,7 +1159,7 @@ export default function TodayPage() {
             <div style={{ marginTop:'1rem', padding:'0.85rem 1rem', background:'#152015', border:'1px solid #2d4a2d', borderRadius:'10px', color:'var(--success)', fontWeight:'600' }}>
               ✓ All done — next session targets updated.
             </div>
-          ) : (
+          ) : !isReadOnly ? (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'stretch', gap:'0.5rem', marginTop:'1rem' }}>
               <button type="button" onClick={handleFinishWorkout}
                 style={{ padding:'0.75rem 1rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'1rem', cursor:'pointer' }}>
@@ -1143,7 +1170,7 @@ export default function TodayPage() {
                 Skip entire session →
               </button>
             </div>
-          )}
+          ) : null}
         </>
       )}
 
