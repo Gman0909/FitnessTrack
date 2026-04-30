@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3] - 2026-04-30
+
+### Fixed
+- In-app update now uses the absolute path to `npm` (derived from the running node binary) so it works correctly when started via systemd, which has a minimal PATH that may not include `npm`
+- Update UI now polls a `/api/admin/update-status` endpoint during the build phase instead of blindly checking if the server is alive — errors from `git pull` or `npm run build` are shown directly in the UI rather than silently dropped
+- "Update complete" message now shows the new version number; error state shows the actual build output and a Dismiss button
+
 ## [1.0.2] - 2026-04-30
 
 ### Fixed

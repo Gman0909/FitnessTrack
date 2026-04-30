@@ -54,7 +54,8 @@ export const api = {
   resetStats: ()              => req('POST', '/stats/reset'),
 
   // Admin
-  triggerUpdate: ()       => req('POST',  '/admin/update'),
+  triggerUpdate:    () => req('POST', '/admin/update'),
+  getUpdateStatus:  () => req('GET',  '/admin/update-status'),
 
   // Auth
   getMe:         ()       => req('GET',   '/auth/me'),

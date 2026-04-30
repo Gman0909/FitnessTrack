@@ -71,8 +71,9 @@ export function SetupPage() {
   const [editTarget, setEdit]     = useState(null);
   const [loading, setLoading]     = useState(true);
   const { unit, toggle }          = useUnit();
-  const [version, setVersion]     = useState(null);
-  const [updateState, setUpdateState] = useState('idle'); // idle | running | restarting | done | error
+  const [version, setVersion]         = useState(null);
+  const [updateState, setUpdateState] = useState('idle'); // idle | building | restarting | done | error
+  const [updateLog, setUpdateLog]     = useState('');
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -85,27 +86,58 @@ export function SetupPage() {
     return () => clearInterval(pollRef.current);
   }, []);
 
-  async function handleUpdate() {
-    setUpdateState('running');
-    const prevVersion = version;
-    try { await api.triggerUpdate(); } catch { /* connection may close before response */ }
+  function waitForRestart(prevVersion) {
     setUpdateState('restarting');
     const start = Date.now();
-    let wentDown = false;
     pollRef.current = setInterval(async () => {
-      if (Date.now() - start > 5 * 60 * 1000) {
+      if (Date.now() - start > 3 * 60 * 1000) {
         clearInterval(pollRef.current);
+        setUpdateLog('Server did not come back within 3 minutes.');
         setUpdateState('error');
         return;
       }
       try {
         const r = await fetch('/api/version', { cache: 'no-store' });
-        if (!r.ok) { wentDown = true; return; }
-        if (!wentDown) return; // server hasn't restarted yet — still the old process
+        if (!r.ok) return;
         const { version: newVer } = await r.json();
-        if (newVer !== prevVersion) { clearInterval(pollRef.current); setUpdateState('done'); }
+        if (newVer !== prevVersion) {
+          clearInterval(pollRef.current);
+          setVersion(newVer);
+          setUpdateState('done');
+        }
+      } catch { /* still restarting */ }
+    }, 2000);
+  }
+
+  async function handleUpdate() {
+    setUpdateState('building');
+    setUpdateLog('');
+    const prevVersion = version;
+    try { await api.triggerUpdate(); } catch { /* fire and forget */ }
+
+    const start = Date.now();
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - start > 10 * 60 * 1000) {
+        clearInterval(pollRef.current);
+        setUpdateLog('Build timed out after 10 minutes.');
+        setUpdateState('error');
+        return;
+      }
+      try {
+        const { state, log } = await api.getUpdateStatus();
+        if (state === 'error') {
+          clearInterval(pollRef.current);
+          setUpdateLog(log);
+          setUpdateState('error');
+        } else if (state === 'done') {
+          clearInterval(pollRef.current);
+          waitForRestart(prevVersion);
+        }
+        // state === 'running' → keep polling
       } catch {
-        wentDown = true; // fetch failed = server is down and restarting
+        // Server went unreachable — it restarted after process.exit
+        clearInterval(pollRef.current);
+        waitForRestart(prevVersion);
       }
     }, 2000);
   }
@@ -188,34 +220,39 @@ export function SetupPage() {
         </p>
 
         {updateState === 'idle' && (
-          <button
-            onClick={handleUpdate}
-            style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}
-          >
+          <button onClick={handleUpdate}
+            style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}>
             Update to latest
           </button>
         )}
-        {updateState === 'running' && (
-          <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Pulling updates and rebuilding… this may take a minute.</p>
+        {updateState === 'building' && (
+          <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Pulling and rebuilding… this takes a minute or two.</p>
         )}
         {updateState === 'restarting' && (
-          <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Server restarting…</p>
+          <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Restarting server…</p>
         )}
         {updateState === 'done' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'flex-start' }}>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--success)' }}>Update complete.</p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}
-            >
+            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--success)' }}>Updated to {version}.</p>
+            <button onClick={() => window.location.reload()}
+              style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}>
               Reload page
             </button>
           </div>
         )}
         {updateState === 'error' && (
-          <p style={{ fontSize: '0.875rem', color: 'var(--danger)' }}>
-            Update timed out — check server logs for details.
-          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--danger)' }}>Update failed.</p>
+            {updateLog && (
+              <pre style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem 0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '12rem', overflowY: 'auto', width: '100%' }}>
+                {updateLog}
+              </pre>
+            )}
+            <button onClick={() => { setUpdateState('idle'); setUpdateLog(''); }}
+              style={{ padding: '0.4rem 0.9rem', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--muted)', fontSize: '0.875rem', cursor: 'pointer' }}>
+              Dismiss
+            </button>
+          </div>
         )}
       </section>
 
