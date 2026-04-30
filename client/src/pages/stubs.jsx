@@ -86,7 +86,7 @@ export function SetupPage() {
     return () => clearInterval(pollRef.current);
   }, []);
 
-  function waitForRestart(prevVersion) {
+  function waitForRestart() {
     setUpdateState('restarting');
     const start = Date.now();
     pollRef.current = setInterval(async () => {
@@ -100,11 +100,9 @@ export function SetupPage() {
         const r = await fetch('/api/version', { cache: 'no-store' });
         if (!r.ok) return;
         const { version: newVer } = await r.json();
-        if (newVer !== prevVersion) {
-          clearInterval(pollRef.current);
-          setVersion(newVer);
-          setUpdateState('done');
-        }
+        clearInterval(pollRef.current);
+        setVersion(newVer);
+        setUpdateState('done');
       } catch { /* still restarting */ }
     }, 2000);
   }
@@ -112,10 +110,10 @@ export function SetupPage() {
   async function handleUpdate() {
     setUpdateState('building');
     setUpdateLog('');
-    const prevVersion = version;
     try { await api.triggerUpdate(); } catch { /* fire and forget */ }
 
     const start = Date.now();
+    let seenRunning = false;
     pollRef.current = setInterval(async () => {
       if (Date.now() - start > 10 * 60 * 1000) {
         clearInterval(pollRef.current);
@@ -125,19 +123,27 @@ export function SetupPage() {
       }
       try {
         const { state, log } = await api.getUpdateStatus();
+        if (state === 'running') { seenRunning = true; return; }
         if (state === 'error') {
           clearInterval(pollRef.current);
           setUpdateLog(log);
           setUpdateState('error');
         } else if (state === 'done') {
+          // Build finished, server is about to exit — wait for restart
           clearInterval(pollRef.current);
-          waitForRestart(prevVersion);
+          waitForRestart();
+        } else if (state === 'idle' && seenRunning) {
+          // Server already restarted (fresh process reset state to idle)
+          clearInterval(pollRef.current);
+          const r = await fetch('/api/version', { cache: 'no-store' });
+          const { version: newVer } = await r.json();
+          setVersion(newVer);
+          setUpdateState('done');
         }
-        // state === 'running' → keep polling
       } catch {
-        // Server went unreachable — it restarted after process.exit
+        // Server unreachable — mid-restart
         clearInterval(pollRef.current);
-        waitForRestart(prevVersion);
+        waitForRestart();
       }
     }, 2000);
   }

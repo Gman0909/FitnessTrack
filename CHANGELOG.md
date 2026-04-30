@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.6] - 2026-04-30
+
+### Fixed
+- In-app update no longer hangs on "pulling and rebuilding" after a successful build. The polling loop now handles `state=idle` (server restarted with fresh in-memory state) as a completion signal, and `waitForRestart` no longer requires a version change — it just waits for the server to respond, so updating when already on the latest version works correctly.
+
 ## [1.0.5] - 2026-04-30
 
 ### Fixed
