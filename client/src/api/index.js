@@ -52,6 +52,9 @@ export const api = {
   getStats:   (scope = 'all') => req('GET',  `/stats?scope=${scope}`),
   resetStats: ()              => req('POST', '/stats/reset'),
 
+  // Admin
+  triggerUpdate: ()       => req('POST',  '/admin/update'),
+
   // Auth
   getMe:         ()       => req('GET',   '/auth/me'),
   login:         (body)   => req('POST',  '/auth/login',    body),

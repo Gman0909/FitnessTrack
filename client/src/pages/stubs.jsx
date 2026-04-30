@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
 
@@ -71,6 +71,9 @@ export function SetupPage() {
   const [editTarget, setEdit]     = useState(null);
   const [loading, setLoading]     = useState(true);
   const { unit, toggle }          = useUnit();
+  const [version, setVersion]     = useState(null);
+  const [updateState, setUpdateState] = useState('idle'); // idle | running | restarting | done | error
+  const pollRef = useRef(null);
 
   useEffect(() => {
     Promise.all([api.getEquipment(), api.getCustomExercises()]).then(([eqList, exList]) => {
@@ -78,7 +81,27 @@ export function SetupPage() {
       setCustoms(exList);
       setLoading(false);
     });
+    fetch('/api/version').then(r => r.json()).then(d => setVersion(d.version)).catch(() => {});
+    return () => clearInterval(pollRef.current);
   }, []);
+
+  async function handleUpdate() {
+    setUpdateState('running');
+    try { await api.triggerUpdate(); } catch { /* connection may close before response */ }
+    setUpdateState('restarting');
+    const start = Date.now();
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - start > 5 * 60 * 1000) {
+        clearInterval(pollRef.current);
+        setUpdateState('error');
+        return;
+      }
+      try {
+        const r = await fetch('/api/version', { cache: 'no-store' });
+        if (r.ok) { clearInterval(pollRef.current); setUpdateState('done'); }
+      } catch { /* not up yet */ }
+    }, 2000);
+  }
 
   async function handleToggle(eq) {
     if (saved.has(eq)) {
@@ -148,6 +171,44 @@ export function SetupPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem', marginTop: '0.5rem' }}>
+        <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--text)' }}>App</h3>
+        <p style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: 'var(--muted)' }}>
+          Version <strong style={{ color: 'var(--text)' }}>{version ?? '…'}</strong>
+        </p>
+
+        {updateState === 'idle' && (
+          <button
+            onClick={handleUpdate}
+            style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}
+          >
+            Update to latest
+          </button>
+        )}
+        {updateState === 'running' && (
+          <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Pulling updates and rebuilding… this may take a minute.</p>
+        )}
+        {updateState === 'restarting' && (
+          <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Server restarting…</p>
+        )}
+        {updateState === 'done' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'flex-start' }}>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--success)' }}>Update complete.</p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}
+            >
+              Reload page
+            </button>
+          </div>
+        )}
+        {updateState === 'error' && (
+          <p style={{ fontSize: '0.875rem', color: 'var(--danger)' }}>
+            Update timed out — check server logs for details.
+          </p>
         )}
       </section>
 
