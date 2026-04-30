@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.4] - 2026-04-30
+
+### Fixed
+- In-app update: pass `-c safe.directory=<path>` to `git pull` so it succeeds when the server process runs as a different user than the repo owner (common on Pi systemd installs)
+
 ## [1.0.3] - 2026-04-30
 
 ### Fixed

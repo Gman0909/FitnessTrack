@@ -22,7 +22,7 @@ router.post('/update', requireAuth, (req, res) => {
   res.json({ ok: true });
 
   setTimeout(() => {
-    const cmd = `git pull && "${npmBin}" install && "${npmBin}" install --prefix client && "${npmBin}" run build`;
+    const cmd = `git -c safe.directory="${ROOT}" pull && "${npmBin}" install && "${npmBin}" install --prefix client && "${npmBin}" run build`;
     exec(cmd, { cwd: ROOT }, (err, stdout, stderr) => {
       if (err) {
         updateStatus = { state: 'error', log: (stderr || err.message || stdout).trim() };
