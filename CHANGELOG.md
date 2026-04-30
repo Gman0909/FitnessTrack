@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.2] - 2026-04-30
+
+### Fixed
+- In-app update button now correctly restarts the server after rebuilding (`process.exit(0)` → `process.exit(1)` so systemd's `Restart=on-failure` fires)
+- Update progress UI now waits for the server to go down and come back with a changed version before declaring success, preventing false "done" on the still-running old process
+
 ## [1.0.1] - 2026-04-30
 
 ### Added
