@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.5] - 2026-04-30
+
+### Fixed
+- In-app update: run `git config --global --add safe.directory <path>` before `git pull` — git ignores `safe.directory` passed via `-c` and only reads it from global/system config
+
 ## [1.0.4] - 2026-04-30
 
 ### Fixed
