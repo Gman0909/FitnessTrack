@@ -40,7 +40,7 @@ router.get('/slot', (req, res) => {
     WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
   `);
 
-  const slotDone = s => s && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
+  const slotDone = s => s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
 
   // Find current slot: first (week, dow) in sequence not yet workout-complete
   const maxScan   = Math.max(plan.week_count ?? 4, weekNum) + 1;
@@ -71,6 +71,29 @@ router.get('/slot', (req, res) => {
   res.json({ session: session ?? null, is_current: isCurrent, is_locked: isLocked });
 });
 
+router.post('/:id/unlock', (req, res) => {
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+  const expectedSets = db.prepare('SELECT COALESCE(SUM(set_count),0) as n FROM schedule WHERE plan_id IS ? AND day_of_week = ?').get(session.plan_id ?? null, session.session_dow)?.n ?? 0;
+  const doneSets     = db.prepare('SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)').get(session.id)?.n ?? 0;
+  const isDone = session.checked_in === 1 || (expectedSets > 0 && doneSets >= expectedSets);
+  if (!isDone) return res.status(400).json({ error: 'Session is not completed' });
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM session_checkins WHERE session_id = ?').run(session.id);
+    if (session.date) {
+      const nextDay = new Date(session.date + 'T00:00:00Z');
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const nextDayStr = nextDay.toISOString().split('T')[0];
+      db.prepare('DELETE FROM set_targets WHERE valid_from = ? AND plan_id IS ?')
+        .run(nextDayStr, session.plan_id ?? null);
+    }
+    db.prepare('UPDATE sessions SET checked_in = 0, unlocked = 1 WHERE id = ?').run(session.id);
+  })();
+
+  res.json({ ok: true });
+});
+
 router.post('/:id/skip', (req, res) => {
   const sessionId = req.params.id;
   const session   = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
@@ -97,7 +120,7 @@ router.post('/:id/skip', (req, res) => {
         for (let i = 1; i <= slot.set_count; i++)
           ins.run(sessionId, slot.exercise_id, i);
     }
-    db.prepare('UPDATE sessions SET checked_in = 1 WHERE id = ?').run(sessionId);
+    db.prepare('UPDATE sessions SET checked_in = 1, unlocked = 0 WHERE id = ?').run(sessionId);
   })();
 
   res.json({ ok: true });
@@ -248,7 +271,7 @@ router.post('/:id/checkin', (req, res) => {
   ).all(sessionId).map(r => r.muscle_group);
 
   if (allGroups.length > 0 && allGroups.every(g => checkedGroups.includes(g))) {
-    db.prepare('UPDATE sessions SET checked_in = 1 WHERE id = ?').run(sessionId);
+    db.prepare('UPDATE sessions SET checked_in = 1, unlocked = 0 WHERE id = ?').run(sessionId);
   }
 
   res.json({ ok: true, modifier });

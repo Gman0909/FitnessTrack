@@ -15,6 +15,7 @@ export const api = {
   getSessionForDate:  (date)               => req('GET', `/sessions/date/${date}`),
   getSessionForSlot:  (planId, week, dow)  => req('GET', `/sessions/slot?plan_id=${planId}&week=${week}&dow=${dow}`),
   skipSession:       (id)       => req('POST',   `/sessions/${id}/skip`),
+  unlockSession:     (id)       => req('POST',   `/sessions/${id}/unlock`),
   getSessionSets:    (id)       => req('GET',    `/sessions/${id}/sets`),
   logSet:            (id, body) => req('POST',   `/sessions/${id}/sets`, body),
   checkin:           (id, body) => req('POST',   `/sessions/${id}/checkin`, body),

@@ -224,6 +224,8 @@ if (!cols('session_checkins').includes('intensity'))
   db.exec('ALTER TABLE session_checkins ADD COLUMN intensity TEXT');
 if (!cols('session_checkins').includes('pause_weight'))
   db.exec('ALTER TABLE session_checkins ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
+if (!cols('sessions').includes('unlocked'))
+  db.exec('ALTER TABLE sessions ADD COLUMN unlocked INTEGER NOT NULL DEFAULT 0');
 
 // ── Per-muscle-group training preferences ─────────────────────────────────────
 

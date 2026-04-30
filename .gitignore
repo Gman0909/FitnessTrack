@@ -7,3 +7,4 @@ client/dist/
 .env
 .DS_Store
 Thumbs.db
+scripts/seed-demo.js

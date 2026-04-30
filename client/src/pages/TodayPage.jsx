@@ -308,6 +308,59 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
   );
 }
 
+// ── Skip session confirm modal ────────────────────────────────────────────────
+
+function SkipSessionModal({ onConfirm, onCancel }) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy]   = useState(false);
+  const confirmed = value.trim().toLowerCase() === 'skip';
+
+  async function handleConfirm() {
+    if (!confirmed) return;
+    setBusy(true);
+    await onConfirm();
+  }
+
+  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
+  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'400px', display:'flex', flexDirection:'column', gap:'1.25rem', border:'1px solid var(--border)' };
+
+  return (
+    <div style={overlay} onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div style={box}>
+        <div>
+          <h3 style={{ margin:'0 0 0.5rem', color:'var(--text)', fontSize:'1.1rem', fontWeight:'700' }}>Skip entire session?</h3>
+          <p style={{ margin:0, color:'var(--muted)', fontSize:'0.875rem', lineHeight:1.5 }}>
+            All sets will be marked as skipped and the session will be closed. This cannot be undone.
+          </p>
+        </div>
+        <div>
+          <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--dim)', marginBottom:'0.4rem' }}>
+            Type <strong style={{ color:'var(--text)' }}>skip</strong> to confirm
+          </label>
+          <input
+            autoFocus
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && confirmed && handleConfirm()}
+            placeholder="skip"
+            style={{ width:'100%', padding:'0.55rem 0.75rem', border:`1px solid ${confirmed ? 'var(--danger)' : 'var(--border)'}`, borderRadius:'8px', background:'var(--input-bg)', color:'var(--text)', fontSize:'1rem', boxSizing:'border-box', outline:'none' }}
+          />
+        </div>
+        <div style={{ display:'flex', gap:'0.5rem' }}>
+          <button type="button" onClick={onCancel} disabled={busy}
+            style={{ flex:1, padding:'0.7rem', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer' }}>
+            Cancel
+          </button>
+          <button type="button" onClick={handleConfirm} disabled={!confirmed || busy}
+            style={{ flex:1, padding:'0.7rem', background: confirmed ? 'var(--danger)' : 'var(--surface2)', color: confirmed ? '#fff' : 'var(--dim)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.9rem', cursor: confirmed && !busy ? 'pointer' : 'default', transition:'background 0.15s, color 0.15s' }}>
+            {busy ? 'Skipping…' : 'Skip session'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Finish confirm modal ───────────────────────────────────────────────────────
 
 function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
@@ -740,8 +793,9 @@ export default function TodayPage() {
 
   // Finish workout
   const liveValues = useRef(new Map());
-  const [reloadKey, setReloadKey]     = useState(0);
-  const [finishModal, setFinishModal] = useState(null);
+  const [reloadKey, setReloadKey]       = useState(0);
+  const [finishModal, setFinishModal]   = useState(null);
+  const [skipConfirm, setSkipConfirm]   = useState(false);
 
   // Per-exercise reset counters (incremented to signal SetRows to untick)
   const [exerciseResetCounters, setExerciseResetCounters] = useState({});
@@ -878,8 +932,23 @@ export default function TodayPage() {
 
   const isReadOnly = !isCurrent;
 
+  // The slot immediately before the current slot — the only one eligible for unlock
+  const isUnlockable = (() => {
+    if (!calendarData?.weeks || !selectedSlot || isCurrent || isLocked) return false;
+    if (session?.unlocked) return false;
+    const sessionIsDone = session?.checked_in === 1 ||
+      (session?.done_sets > 0 && session?.done_sets >= session?.expected_sets);
+    if (!sessionIsDone) return false;
+    const flat = calendarData.weeks.flatMap(w => w.days.map(d => ({ weekNum: w.week_num, dow: d.day_of_week, is_current: d.is_current })));
+    const curIdx = flat.findIndex(s => s.is_current);
+    if (curIdx <= 0) return false;
+    const prev = flat[curIdx - 1];
+    return prev.weekNum === selectedSlot.weekNum && prev.dow === selectedSlot.dow;
+  })();
+
   const allDone = session?.checked_in === 1 ||
-    (groups.length > 0 && groups.every(g => checkedInGroups.has(g.muscle_group)));
+    (groups.length > 0 && groups.every(g => checkedInGroups.has(g.muscle_group))) ||
+    (isReadOnly && (session?.expected_sets ?? 0) > 0 && (session?.done_sets ?? 0) >= (session?.expected_sets ?? 0));
 
   // ── Auto-trigger check-in ─────────────────────────────────────────────────────
 
@@ -1023,14 +1092,27 @@ export default function TodayPage() {
     });
   }
 
+  // ── Unlock previous session ───────────────────────────────────────────────────
+
+  async function handleUnlockSession() {
+    if (!session?.id) return;
+    await api.unlockSession(session.id);
+    const calData = await api.getPlanCalendar(activePlan.id);
+    setCalendarData(calData);
+    setReloadKey(k => k + 1);
+  }
+
   // ── Skip helpers ──────────────────────────────────────────────────────────────
 
   async function handleSkipSession() {
     if (!session || isReadOnly) return;
     await api.skipSession(session.id);
     setSession(s => ({ ...s, checked_in: 1 }));
-    const allKeys = exercises.flatMap(ex => ex.sets.map(s => `${ex.exercise_id}-${s.set_num}`));
+    const allKeys    = exercises.flatMap(ex => ex.sets.map(s => `${ex.exercise_id}-${s.set_num}`));
+    const allGroups  = new Set(exercises.map(ex => ex.muscle_group));
     setDoneSet(new Set(allKeys));
+    setDismissed(prev => new Set([...prev, ...allGroups]));
+    setPending(null);
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
   }
 
@@ -1167,8 +1249,16 @@ export default function TodayPage() {
           ))}
 
           {allDone ? (
-            <div style={{ marginTop:'1rem', padding:'0.85rem 1rem', background:'#152015', border:'1px solid #2d4a2d', borderRadius:'10px', color:'var(--success)', fontWeight:'600' }}>
-              ✓ All done — next session targets updated.
+            <div style={{ marginTop:'1rem' }}>
+              <div style={{ padding:'0.85rem 1rem', background:'#152015', border:'1px solid #2d4a2d', borderRadius:'10px', color:'var(--success)', fontWeight:'600' }}>
+                ✓ All done — next session targets updated.
+              </div>
+              {isUnlockable && (
+                <button type="button" onClick={handleUnlockSession}
+                  style={{ marginTop:'0.5rem', background:'none', border:'none', color:'var(--dim)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline', padding:'0.25rem 0' }}>
+                  Unlock session for editing →
+                </button>
+              )}
             </div>
           ) : !isReadOnly ? (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'stretch', gap:'0.5rem', marginTop:'1rem' }}>
@@ -1176,7 +1266,7 @@ export default function TodayPage() {
                 style={{ padding:'0.75rem 1rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'1rem', cursor:'pointer' }}>
                 Finish Workout
               </button>
-              <button type="button" onClick={handleSkipSession}
+              <button type="button" onClick={() => setSkipConfirm(true)}
                 style={{ background:'none', border:'none', color:'var(--dim)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline', padding:'0.25rem 0' }}>
                 Skip entire session →
               </button>
@@ -1191,6 +1281,13 @@ export default function TodayPage() {
           muscleGroup={pendingCheckin}
           onCheckin={onCheckin}
           onClose={handleClosePending}
+        />
+      )}
+
+      {skipConfirm && (
+        <SkipSessionModal
+          onConfirm={async () => { await handleSkipSession(); setSkipConfirm(false); }}
+          onCancel={() => setSkipConfirm(false)}
         />
       )}
 

@@ -244,7 +244,7 @@ router.get('/:id/calendar', (req, res) => {
   const planId    = plan.id;
 
   const getSlotSession = db.prepare(`
-    SELECT s.id, s.checked_in, s.date,
+    SELECT s.id, s.checked_in, s.unlocked, s.date,
            COUNT(DISTINCT ls.exercise_id) as exercise_count,
            COUNT(DISTINCT CASE WHEN ls.skipped = 0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
              THEN ls.exercise_id END) as logged_count,
@@ -258,7 +258,7 @@ router.get('/:id/calendar', (req, res) => {
     GROUP BY s.id
   `);
 
-  const slotDone = s => s && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
+  const slotDone = s => s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
 
   const getWeekDates = db.prepare(`
     SELECT MIN(date) as start_date, MAX(date) as end_date

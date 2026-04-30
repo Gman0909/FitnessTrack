@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useAuth } from '../auth.jsx';
 import { BarbellLogo } from '../App.jsx';
@@ -22,6 +23,7 @@ const field = {
 
 export default function AuthPage() {
   const { setUser } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab]           = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -41,10 +43,12 @@ export default function AuthPage() {
     }
     setBusy(true);
     try {
-      const user = tab === 'login'
-        ? await api.login({ username, password })
-        : await api.register({ username, password, name, glyph });
+      const isRegister = tab === 'register';
+      const user = isRegister
+        ? await api.register({ username, password, name, glyph })
+        : await api.login({ username, password });
       setUser(user);
+      if (isRegister) navigate('/setup');
     } catch (err) {
       const msg = err.message ?? '';
       // Try to extract the server error message from the response
