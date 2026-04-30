@@ -65,9 +65,22 @@ function EditExerciseModal({ exercise, onSave, onClose }) {
 
 // ── Setup Page ────────────────────────────────────────────────────────────────
 
+const REP_RANGE_OPTIONS = [
+  { v: 'powerlifting', l: '5–8',  title: 'Powerlifting' },
+  { v: 'standard',     l: '8–12', title: 'Standard' },
+  { v: 'volume',       l: '12–15', title: 'Volume' },
+];
+
+const AGGRESSIVENESS_OPTIONS = [
+  { v: 'conservative', l: 'Slow',   title: 'Conservative' },
+  { v: 'moderate',     l: 'Normal', title: 'Moderate' },
+  { v: 'aggressive',   l: 'Fast',   title: 'Aggressive' },
+];
+
 export function SetupPage() {
   const [saved, setSaved]         = useState(new Set());
   const [customs, setCustoms]     = useState([]);
+  const [mgSettings, setMgSettings] = useState([]);
   const [editTarget, setEdit]     = useState(null);
   const [loading, setLoading]     = useState(true);
   const { unit, toggle }          = useUnit();
@@ -77,14 +90,21 @@ export function SetupPage() {
   const pollRef = useRef(null);
 
   useEffect(() => {
-    Promise.all([api.getEquipment(), api.getCustomExercises()]).then(([eqList, exList]) => {
-      setSaved(new Set(eqList));
-      setCustoms(exList);
-      setLoading(false);
-    });
+    Promise.all([api.getEquipment(), api.getCustomExercises(), api.getMuscleGroupSettings()])
+      .then(([eqList, exList, mgList]) => {
+        setSaved(new Set(eqList));
+        setCustoms(exList);
+        setMgSettings(mgList);
+        setLoading(false);
+      });
     fetch('/api/version').then(r => r.json()).then(d => setVersion(d.version)).catch(() => {});
     return () => clearInterval(pollRef.current);
   }, []);
+
+  async function handleMgUpdate(muscleGroup, field, value) {
+    setMgSettings(s => s.map(r => r.muscle_group === muscleGroup ? { ...r, [field]: value } : r));
+    await api.updateMuscleGroupSetting(muscleGroup, { [field]: value });
+  }
 
   function waitForRestart() {
     setUpdateState('restarting');
@@ -197,7 +217,42 @@ export function SetupPage() {
         </div>
       </section>
 
-      <section>
+      <section style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+        <h3 style={{ fontSize: '1rem', marginBottom: '0.25rem', color: 'var(--text)' }}>Training preferences</h3>
+        <p style={{ color: 'var(--muted)', fontSize: '0.875rem', margin: '0 0 1rem' }}>
+          Rep range controls when weight increases; speed controls how boldly the algorithm responds to positive check-in signals.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', paddingBottom: '0.35rem', marginBottom: '0.1rem', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ width: '6.5rem', flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--dim)', fontWeight: '600' }}>Rep range</span>
+            <span style={{ flex: 1, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--dim)', fontWeight: '600' }}>Progression</span>
+          </div>
+          {mgSettings.map(({ muscle_group, rep_range, aggressiveness }) => (
+            <div key={muscle_group} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.5rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
+              <span style={{ width: '6rem', flexShrink: 0, fontWeight: '500', color: 'var(--text)', textTransform: 'capitalize', fontSize: '0.9rem' }}>{muscle_group}</span>
+              <div style={{ flex: 1, display: 'flex', gap: '0.25rem' }}>
+                {REP_RANGE_OPTIONS.map(({ v, l, title }) => (
+                  <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'rep_range', v)}
+                    style={{ flex: 1, padding: '0.3rem 0', border: `1px solid ${rep_range === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '6px', fontSize: '0.78rem', background: rep_range === v ? 'var(--btn)' : 'var(--surface)', color: rep_range === v ? 'var(--btn-text)' : 'var(--muted)', fontWeight: rep_range === v ? '600' : 'normal', cursor: 'pointer' }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div style={{ flex: 1, display: 'flex', gap: '0.25rem' }}>
+                {AGGRESSIVENESS_OPTIONS.map(({ v, l, title }) => (
+                  <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'aggressiveness', v)}
+                    style={{ flex: 1, padding: '0.3rem 0', border: `1px solid ${aggressiveness === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '6px', fontSize: '0.78rem', background: aggressiveness === v ? 'var(--btn)' : 'var(--surface)', color: aggressiveness === v ? 'var(--btn-text)' : 'var(--muted)', fontWeight: aggressiveness === v ? '600' : 'normal', cursor: 'pointer' }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
         <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--text)' }}>Custom exercises</h3>
         {customs.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>No custom exercises yet. Create one from the Schedule exercise picker.</p>

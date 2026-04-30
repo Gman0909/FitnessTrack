@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { nextSetTarget, computeCheckinModifier } from '../../shared/algorithm.js';
+import { nextExerciseTargets, computeCheckinModifier } from '../../shared/algorithm.js';
 
 const router = Router();
 
@@ -149,7 +149,7 @@ router.get('/:id/checkins', (req, res) => {
 });
 
 router.post('/:id/checkin', (req, res) => {
-  const { pain, recovery, pump, muscle_group } = req.body;
+  const { pain, recovery, pump, intensity, pause_weight, muscle_group } = req.body;
   const sessionId = req.params.id;
 
   const session = db.prepare('SELECT plan_id FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
@@ -157,11 +157,18 @@ router.post('/:id/checkin', (req, res) => {
   const planId = session.plan_id ?? null;
 
   db.prepare(`
-    INSERT OR REPLACE INTO session_checkins (session_id, muscle_group, pain, recovery, pump)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(sessionId, muscle_group, pain, recovery, pump);
+    INSERT OR REPLACE INTO session_checkins (session_id, muscle_group, pain, recovery, pump, intensity, pause_weight)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(sessionId, muscle_group, pain, recovery, pump, intensity ?? null, pause_weight ? 1 : 0);
 
-  const modifier = computeCheckinModifier({ pain, recovery, pump });
+  const modifier = computeCheckinModifier({ pain, recovery, pump, intensity });
+
+  const mgSettings   = db.prepare(
+    'SELECT rep_range, aggressiveness FROM muscle_group_settings WHERE user_id = ? AND muscle_group = ?'
+  ).get(req.user.id, muscle_group) ?? {};
+  const repRange       = mgSettings.rep_range      ?? 'standard';
+  const aggressiveness = mgSettings.aggressiveness ?? 'moderate';
+
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
@@ -172,23 +179,39 @@ router.post('/:id/checkin', (req, res) => {
     WHERE ls.session_id = ? AND e.muscle_group = ?
   `).all(sessionId, muscle_group);
 
+  const getTarget = db.prepare(`
+    SELECT st.*, e.default_increment as increment, e.equipment
+    FROM set_targets st JOIN exercises e ON e.id = st.exercise_id
+    WHERE st.exercise_id = ? AND st.set_num = ?
+      AND st.valid_from <= date('now') AND st.plan_id IS ?
+    ORDER BY st.valid_from DESC LIMIT 1
+  `);
+
   const writeTarget = db.prepare(
     'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, ?, ?)'
   );
 
-  db.transaction(() => {
-    for (const ls of loggedSets) {
-      const current = db.prepare(`
-        SELECT st.*, e.default_increment as increment, e.equipment
-        FROM set_targets st JOIN exercises e ON e.id = st.exercise_id
-        WHERE st.exercise_id = ? AND st.set_num = ?
-          AND st.valid_from <= date('now') AND st.plan_id IS ?
-        ORDER BY st.valid_from DESC LIMIT 1
-      `).get(ls.exercise_id, ls.set_num, planId);
+  // Group logged sets by exercise so the algorithm sees the full cluster at once
+  const byExercise = new Map();
+  for (const ls of loggedSets) {
+    if (!byExercise.has(ls.exercise_id)) byExercise.set(ls.exercise_id, []);
+    byExercise.get(ls.exercise_id).push(ls);
+  }
 
-      if (!current) continue;
-      const { weight, reps } = nextSetTarget(current, ls, modifier);
-      writeTarget.run(ls.exercise_id, ls.set_num, weight, reps, tomorrowStr, planId);
+  db.transaction(() => {
+    for (const [exerciseId, sets] of byExercise) {
+      const setData = sets
+        .map(ls => ({ set_num: ls.set_num, target: getTarget.get(exerciseId, ls.set_num, planId), logged: ls }))
+        .filter(s => s.target != null);
+      if (!setData.length) continue;
+
+      const newTargets = nextExerciseTargets(setData, modifier, {
+        pauseWeight: !!pause_weight, pain, repRange, aggressiveness,
+      });
+
+      for (const { set_num, weight, reps } of newTargets) {
+        writeTarget.run(exerciseId, set_num, weight, reps, tomorrowStr, planId);
+      }
     }
   })();
 

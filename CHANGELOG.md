@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.0.9] - 2026-04-30
+
+### Changed
+- **Exercise-level algorithm** — progression is now decided across the full set cluster rather than independently per set. The heaviest active set drives the weight-bump trigger; the worst-performing set drives the hold/reps decision. Changes are applied proportionally to all sets, preserving pyramid and drop-set structures. Weights rounded to nearest 0.5 kg.
+- **`weight_used` as base** — the algorithm now uses the weight the user actually loaded (not the previous target) as the starting point for the next session's recommendation. If a user deviated from the target, that deviation carries forward.
+- **Volume display** — the per-set progression hint is replaced with a single exercise-level volume indicator at the bottom of each card: `▲ 2475 kg·reps (+3%)` or `▼` in red for a reduction. Computed as `Σ(weight × reps)` across all sets, current targets vs previous.
+
+## [1.0.8] - 2026-04-30
+
+### Added
+- **Per-muscle-group training preferences** in the Setup page — each muscle group now has two independent settings:
+  - **Rep range**: 5–8 (powerlifting) / 8–12 (standard, default) / 12–15 (volume) — controls when weight progression triggers and the deload reset floor
+  - **Speed**: Slow / Normal / Fast — scales how strongly positive check-in signals (too easy, never sore, good pump) amplify progression; negative signals (pain, too much, still sore) always apply at full strength
+- `muscle_group_settings` DB table (auto-migrated); defaults to standard / moderate for all muscle groups
+
+### Changed
+- Rep range and aggressiveness are now orthogonal settings — low reps no longer implies fast progression or vice versa
+- Algorithm previously used a single `aggressiveness` enum that conflated rep range with progression speed; these are now separate dimensions
+
+## [1.0.7] - 2026-04-30
+
+### Added
+- **Intensity check-in row** — "Too easy / Just right / Too much" replaces guesswork about load; feeds directly into the next-session modifier (+2 / 0 / –2).
+- **"Pause weight increases" checkbox** in the check-in modal — locks the weight for that muscle group's sets while still allowing rep/set adjustments.
+- **Percentage-aware weight increments** — the effective increment is now capped at 10% of working weight (floor 1.25 kg), so light isolation exercises no longer jump by unrealistic amounts.
+- **Pain as a safety gate** — high pain now holds all targets unchanged (no progression at all); medium pain blocks weight increases while still allowing rep adjustments.
+- **Deload trigger** — a combined modifier of ≤ –3 (e.g. too_much + still_sore + low pain) drops weight 10% and resets to the bottom of the rep range instead of just holding.
+- **Per-call aggressiveness tier** — `nextSetTarget` now accepts `aggressiveness: 'conservative' | 'moderate' | 'aggressive'`, changing the rep range (10–15 / 6–12 / 5–8) and therefore when weight progression triggers.
+
+### Changed
+- **Recovery buttons reordered** — now: Never sore → Still sore → Healed (removed "Just in time").
+- **Recovery scoring updated** — "Healed" now scores 0 (was +1); "Never sore" stays +1. Healed is expected recovery; never sore signals under-stimulation.
+
 ## [1.0.6] - 2026-04-30
 
 ### Fixed

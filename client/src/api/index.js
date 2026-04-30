@@ -57,6 +57,10 @@ export const api = {
   triggerUpdate:    () => req('POST', '/admin/update'),
   getUpdateStatus:  () => req('GET',  '/admin/update-status'),
 
+  // Settings
+  getMuscleGroupSettings:    ()            => req('GET', '/settings/muscle-groups'),
+  updateMuscleGroupSetting:  (group, body) => req('PUT', `/settings/muscle-groups/${encodeURIComponent(group)}`, body),
+
   // Auth
   getMe:         ()       => req('GET',   '/auth/me'),
   login:         (body)   => req('POST',  '/auth/login',    body),

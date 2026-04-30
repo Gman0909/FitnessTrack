@@ -220,6 +220,26 @@ if (!cols('sessions').includes('week_num')) {
   db.pragma('foreign_keys = ON');
 }
 
+if (!cols('session_checkins').includes('intensity'))
+  db.exec('ALTER TABLE session_checkins ADD COLUMN intensity TEXT');
+if (!cols('session_checkins').includes('pause_weight'))
+  db.exec('ALTER TABLE session_checkins ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
+
+// ── Per-muscle-group training preferences ─────────────────────────────────────
+
+const tableNames = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map(r => r.name);
+if (!tableNames.includes('muscle_group_settings')) {
+  db.exec(`
+    CREATE TABLE muscle_group_settings (
+      user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      muscle_group   TEXT    NOT NULL,
+      rep_range      TEXT    NOT NULL DEFAULT 'standard',
+      aggressiveness TEXT    NOT NULL DEFAULT 'moderate',
+      PRIMARY KEY (user_id, muscle_group)
+    )
+  `);
+}
+
 // ── Default equipment (all enabled on first install) ─────────────────────────
 
 if (db.prepare('SELECT COUNT(*) as n FROM user_equipment').get().n === 0) {

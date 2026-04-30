@@ -10,6 +10,7 @@ import sessionsRouter  from './routes/sessions.js';
 import plansRouter     from './routes/plans.js';
 import statsRouter     from './routes/stats.js';
 import adminRouter     from './routes/admin.js';
+import settingsRouter  from './routes/settings.js';
 import { requireAuth } from './middleware/auth.js';
 import { seed }        from './seed.js';
 
@@ -29,6 +30,7 @@ app.use('/api/sessions',  requireAuth, sessionsRouter);
 app.use('/api/plans',     requireAuth, plansRouter);
 app.use('/api/stats',     requireAuth, statsRouter);
 app.use('/api/admin',     adminRouter);
+app.use('/api/settings',  requireAuth, settingsRouter);
 
 // Serve built client in production
 const clientDist = join(__dirname, '..', 'client', 'dist');

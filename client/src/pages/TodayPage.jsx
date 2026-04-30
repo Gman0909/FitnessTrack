@@ -248,18 +248,20 @@ function DayPickerPanel({ calendarData, selectedSlot, onSelect, weekCount, onDec
 // ── Check-in modal ─────────────────────────────────────────────────────────────
 
 function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
-  const [form, setForm]     = useState({ pain: 'none', recovery: 'just_in_time', pump: 'ok' });
-  const [saving, setSaving] = useState(false);
+  const [form, setForm]       = useState({ pain: 'none', recovery: 'healed', pump: 'ok', intensity: 'just_right' });
+  const [pauseWeight, setPause] = useState(false);
+  const [saving, setSaving]   = useState(false);
 
   const fields = [
-    { key: 'pain',     label: 'Pain',     options: [{ v:'none',l:'None' },{ v:'low',l:'Low' },{ v:'medium',l:'Medium' },{ v:'high',l:'High' }] },
-    { key: 'recovery', label: 'Recovery', options: [{ v:'still_sore',l:'Still sore' },{ v:'just_in_time',l:'Just in time' },{ v:'healed',l:'Healed' },{ v:'never_sore',l:'Never sore' }] },
-    { key: 'pump',     label: 'Pump',     options: [{ v:'poor',l:'Poor' },{ v:'ok',l:'OK' },{ v:'great',l:'Great' }] },
+    { key: 'pain',      label: 'Pain',      options: [{ v:'none',l:'None' },{ v:'low',l:'Low' },{ v:'medium',l:'Medium' },{ v:'high',l:'High' }] },
+    { key: 'recovery',  label: 'Recovery',  options: [{ v:'never_sore',l:'Never sore' },{ v:'still_sore',l:'Still sore' },{ v:'healed',l:'Healed' }] },
+    { key: 'pump',      label: 'Pump',      options: [{ v:'poor',l:'Poor' },{ v:'ok',l:'OK' },{ v:'great',l:'Great' }] },
+    { key: 'intensity', label: 'Intensity', options: [{ v:'too_easy',l:'Too easy' },{ v:'just_right',l:'Just right' },{ v:'too_much',l:'Too much' }] },
   ];
 
   async function handleSubmit() {
     setSaving(true);
-    await api.checkin(sessionId, { ...form, muscle_group: muscleGroup });
+    await api.checkin(sessionId, { ...form, pause_weight: pauseWeight, muscle_group: muscleGroup });
     onCheckin(muscleGroup);
   }
 
@@ -278,22 +280,29 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
             style={{ background:'none', border:'none', color:'var(--dim)', fontSize:'1.4rem', cursor:'pointer', lineHeight:1, padding:'0 4px' }}>✕</button>
         </div>
         {fields.map(({ key, label, options }) => (
-          <div key={key}>
-            <p style={{ margin:'0 0 0.5rem', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--dim)', fontWeight:'600' }}>{label}</p>
-            <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap' }}>
+          <div key={key} style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+            <span style={{ width:'4.5rem', flexShrink:0, fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--dim)', fontWeight:'600' }}>{label}</span>
+            <div style={{ flex:1, display:'flex', gap:'0.35rem' }}>
               {options.map(({ v, l }) => (
                 <button key={v} type="button" onClick={() => setForm(f => ({ ...f, [key]: v }))}
-                  style={{ padding:'0.45rem 0.85rem', border:`1px solid ${form[key]===v?'var(--btn)':'var(--border)'}`, borderRadius:'8px', fontSize:'0.875rem', background:form[key]===v?'var(--btn)':'var(--surface)', color:form[key]===v?'var(--btn-text)':'var(--muted)', fontWeight:form[key]===v?'600':'normal', cursor:'pointer' }}>
+                  style={{ flex:1, padding:'0.45rem 0', border:`1px solid ${form[key]===v?'var(--btn)':'var(--border)'}`, borderRadius:'8px', fontSize:'0.85rem', background:form[key]===v?'var(--btn)':'var(--surface)', color:form[key]===v?'var(--btn-text)':'var(--muted)', fontWeight:form[key]===v?'600':'normal', cursor:'pointer', textAlign:'center' }}>
                   {l}
                 </button>
               ))}
             </div>
           </div>
         ))}
-        <button type="button" onClick={handleSubmit} disabled={saving}
-          style={{ padding:'0.7rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor:'pointer' }}>
-          {saving ? 'Saving…' : 'Submit check-in'}
-        </button>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <button type="button" onClick={handleSubmit} disabled={saving}
+            style={{ padding:'0.7rem 1.5rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor:'pointer' }}>
+            {saving ? 'Saving…' : 'Submit check-in'}
+          </button>
+          <label style={{ display:'flex', alignItems:'center', gap:'0.45rem', cursor:'pointer', userSelect:'none' }}>
+            <input type="checkbox" checked={pauseWeight} onChange={e => setPause(e.target.checked)}
+              style={{ width:'1rem', height:'1rem', accentColor:'var(--btn)', cursor:'pointer' }} />
+            <span style={{ fontSize:'0.8rem', color:'var(--muted)' }}>Pause weight increases</span>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -575,18 +584,20 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
   const lastSetDone = doneSet.has(`${exercise.exercise_id}-${exercise.sets.length}`);
 
-  // Progression hint derived from set 1 (representative for the exercise)
-  const s1 = exercise.sets[0];
-  let progressHint = null;
-  if (s1?.prev_weight != null || s1?.prev_reps != null) {
-    const parts = [];
-    if (s1.prev_weight != null && Math.abs(s1.weight - s1.prev_weight) > 0.001) {
-      parts.push(`${s1.weight > s1.prev_weight ? '↑' : '↓'} ${display(s1.prev_weight)} → ${display(s1.weight)}`);
+  // Volume hint: total session volume (weight × reps across all sets), current vs previous targets
+  let volumeHint = null;
+  if (!isBodyweight && exercise.sets.some(s => s.prev_weight != null || s.prev_reps != null)) {
+    const toDisp  = kg => unit === 'lbs' ? kg * 2.2046 : kg;
+    const curVol  = exercise.sets.reduce((sum, s) => sum + toDisp(s.weight  ?? 0) * (s.reps      ?? 0), 0);
+    const prevVol = exercise.sets.reduce((sum, s) => sum + toDisp((s.prev_weight ?? s.weight) ?? 0) * ((s.prev_reps ?? s.reps) ?? 0), 0);
+    const delta   = curVol - prevVol;
+    const pct     = prevVol > 0 ? (delta / prevVol) * 100 : 0;
+    if (Math.abs(delta) > 0.01) {
+      volumeHint = {
+        text:  `${delta > 0 ? '▲' : '▼'} ${Math.round(curVol)} ${unit}·reps (${delta > 0 ? '+' : ''}${Math.round(pct)}%)`,
+        color: delta > 0 ? 'var(--success)' : 'var(--danger)',
+      };
     }
-    if (s1.prev_reps != null && s1.reps !== s1.prev_reps) {
-      parts.push(`${s1.prev_reps} → ${s1.reps} reps`);
-    }
-    if (parts.length) progressHint = parts.join(' · ');
   }
 
   return (
@@ -673,7 +684,7 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
       })}
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid var(--border)' }}>
-        <span style={{ fontSize:'0.72rem', color:'var(--muted)', letterSpacing:'0.01em' }}>{progressHint ?? ''}</span>
+        <span style={{ fontSize:'0.72rem', color: volumeHint ? volumeHint.color : 'var(--muted)', letterSpacing:'0.01em' }}>{volumeHint?.text ?? ''}</span>
         {!isReadOnly && (
           <div style={{ display:'flex', gap:'0.4rem' }}>
             <button type="button" onClick={onRemoveSet} disabled={exercise.sets.length <= 1 || lastSetDone}
