@@ -1140,7 +1140,12 @@ export default function TodayPage() {
         }
       }
     }
-    if (toLog.length === 0 && toSkip.length === 0) return;
+    if (toLog.length === 0 && toSkip.length === 0) {
+      // All sets already logged — re-trigger check-in for any unchecked groups (e.g. after unlock)
+      const needsCheckin = groups.some(g => groupIsDone(g) && !checkedInGroups.has(g.muscle_group));
+      if (needsCheckin) setDismissed(new Set());
+      return;
+    }
     setFinishModal({ toLog, toSkip });
   }
 
