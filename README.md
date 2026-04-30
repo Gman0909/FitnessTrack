@@ -54,11 +54,11 @@ The modifier is the sum of all four scores (range −5 to +4).
 | Missed target reps by more than 1 | Hold (no rep or weight change) |
 | Otherwise | +1 rep |
 
-After the base decision, the modifier adjusts reps further (+1 per point above 0, −1 per point below). Positive signals are scaled by the **aggressiveness** setting (Conservative ×0.5, Moderate ×1.0, Aggressive ×1.5). If the modifier would push reps past the ceiling without a weight bump, the bump triggers automatically.
+After the base decision, the modifier adjusts reps further (+1 per point above 0, −1 per point below). Positive signals are scaled by the **progression** setting (Slow ×0.5, Normal ×1.0, Fast ×1.5). If the modifier would push reps past the ceiling without a weight bump, the bump triggers automatically.
 
 Weight changes are applied **proportionally across all sets**, preserving pyramid and drop-set structure. Weights are rounded to the nearest 0.5 kg and capped at a 10% jump per session.
 
-### Worked examples (standard rep range 8–12, barbell bench, moderate aggressiveness)
+### Worked examples (standard rep range 8–12, barbell bench, normal progression)
 
 | Scenario | Ratings | Modifier | Outcome |
 |---|---|---|---|
@@ -71,7 +71,7 @@ Weight changes are applied **proportionally across all sets**, preserving pyrami
 | Setting | Options |
 |---|---|
 | **Rep range** | Powerlifting (5–8), Standard (8–12), Volume (12–15) |
-| **Aggressiveness** | Conservative (×0.5 on positive signals), Moderate (×1.0), Aggressive (×1.5) |
+| **Progression** | Slow (×0.5 on positive signals), Normal (×1.0), Fast (×1.5) |
 | **Pause weight** | Blocks weight increases — only reps progress |
 
 Bodyweight exercises (pull-ups, dips, etc.) follow the same rep-progression logic but have no weight axis.
