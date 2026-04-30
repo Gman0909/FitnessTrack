@@ -20,7 +20,7 @@ router.post('/update', requireAuth, (req, res) => {
           return;
         }
         console.log('In-app update complete — restarting...');
-        process.exit(0);
+        process.exit(1); // non-zero triggers Restart=on-failure / Restart=always in systemd
       }
     );
   }, 300);

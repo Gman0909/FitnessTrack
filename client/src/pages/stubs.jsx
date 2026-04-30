@@ -87,9 +87,11 @@ export function SetupPage() {
 
   async function handleUpdate() {
     setUpdateState('running');
+    const prevVersion = version;
     try { await api.triggerUpdate(); } catch { /* connection may close before response */ }
     setUpdateState('restarting');
     const start = Date.now();
+    let wentDown = false;
     pollRef.current = setInterval(async () => {
       if (Date.now() - start > 5 * 60 * 1000) {
         clearInterval(pollRef.current);
@@ -98,8 +100,13 @@ export function SetupPage() {
       }
       try {
         const r = await fetch('/api/version', { cache: 'no-store' });
-        if (r.ok) { clearInterval(pollRef.current); setUpdateState('done'); }
-      } catch { /* not up yet */ }
+        if (!r.ok) { wentDown = true; return; }
+        if (!wentDown) return; // server hasn't restarted yet — still the old process
+        const { version: newVer } = await r.json();
+        if (newVer !== prevVersion) { clearInterval(pollRef.current); setUpdateState('done'); }
+      } catch {
+        wentDown = true; // fetch failed = server is down and restarting
+      }
     }, 2000);
   }
 

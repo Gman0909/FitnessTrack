@@ -42,7 +42,7 @@ Type=simple
 User=${INSTALL_USER}
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${NODE_BIN} server/index.js
-Restart=on-failure
+Restart=always
 RestartSec=5
 Environment=PORT=3001
 Environment=DATABASE_PATH=${INSTALL_DIR}/fitness.db
