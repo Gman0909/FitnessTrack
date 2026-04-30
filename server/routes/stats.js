@@ -110,51 +110,57 @@ router.get('/export', (req, res) => {
   const P    = [uid, planId, planId];
   const slug = planId ? '-this-plan' : '';
 
+  // exercise_history: one row per exercise per session — date, key stats per lift
   if (type === 'exercise_history') {
     const rows = db.prepare(`
-      SELECT s.date, COALESCE(wp.name,'') AS plan_name, s.week_num,
-             ${DOW_NAME} AS day,
+      SELECT s.date, COALESCE(wp.name,'') AS plan_name,
              e.name AS exercise, e.muscle_group,
-             ls.set_num, ls.weight_used, ls.reps_done, ls.skipped
+             COUNT(CASE WHEN ls.skipped=0 AND ls.reps_done IS NOT NULL THEN 1 END) AS sets_done,
+             MAX(CASE WHEN ls.skipped=0 AND ls.weight_used IS NOT NULL THEN ls.weight_used END) AS max_weight_kg,
+             ROUND(COALESCE(SUM(CASE WHEN ls.skipped=0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
+               THEN ls.weight_used * ls.reps_done END), 0)) AS volume_kg_reps
       FROM logged_sets ls
       JOIN sessions s  ON s.id  = ls.session_id
       JOIN exercises e ON e.id  = ls.exercise_id
       LEFT JOIN workout_plans wp ON wp.id = s.plan_id
       WHERE ${SCOPE} AND s.date IS NOT NULL
-      ORDER BY s.date, s.id, e.id, ls.set_num
+      GROUP BY s.id, e.id
+      HAVING sets_done > 0
+      ORDER BY s.date, e.muscle_group, e.name
     `).all(...P);
     return sendCsv(res, `exercise-history${slug}.csv`,
-      ['date','plan','week','day','exercise','muscle_group','set_num','weight_kg','reps','skipped'],
-      rows.map(r => [r.date, r.plan_name, r.week_num, r.day, r.exercise, r.muscle_group,
-                     r.set_num, r.weight_used ?? '', r.reps_done ?? '', r.skipped ? 'yes' : 'no']));
+      ['date','plan','exercise','muscle_group','sets_done','max_weight_kg','volume_kg_reps'],
+      rows.map(r => [r.date, r.plan_name, r.exercise, r.muscle_group,
+                     r.sets_done, r.max_weight_kg ?? '', r.volume_kg_reps]));
   }
 
+  // sessions: one row per workout — total volume and sets
   if (type === 'sessions') {
     const rows = db.prepare(`
-      SELECT s.date, COALESCE(wp.name,'') AS plan_name, s.week_num,
-             ${DOW_NAME} AS day,
+      SELECT s.date, COALESCE(wp.name,'') AS plan_name, s.week_num, ${DOW_NAME} AS day,
              ROUND(COALESCE(SUM(CASE WHEN ls.skipped=0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
-               THEN ls.weight_used * ls.reps_done END), 0)) AS volume,
+               THEN ls.weight_used * ls.reps_done END), 0)) AS volume_kg_reps,
              COUNT(CASE WHEN ls.skipped=0 AND ls.reps_done IS NOT NULL THEN 1 END) AS sets_logged,
-             s.checked_in
+             COUNT(DISTINCT CASE WHEN ls.skipped=0 AND ls.reps_done IS NOT NULL THEN ls.exercise_id END) AS exercises
       FROM sessions s
       LEFT JOIN logged_sets ls ON ls.session_id = s.id
       LEFT JOIN workout_plans wp ON wp.id = s.plan_id
       WHERE ${SCOPE} AND s.date IS NOT NULL
       GROUP BY s.id
-      HAVING volume > 0 OR sets_logged > 0
-      ORDER BY s.date, s.id
+      HAVING sets_logged > 0
+      ORDER BY s.date
     `).all(...P);
     return sendCsv(res, `sessions${slug}.csv`,
-      ['date','plan','week','day','volume_kg_reps','sets_logged','checked_in'],
-      rows.map(r => [r.date, r.plan_name, r.week_num, r.day, r.volume, r.sets_logged,
-                     r.checked_in ? 'yes' : 'no']));
+      ['date','plan','week','day','exercises','sets_logged','volume_kg_reps'],
+      rows.map(r => [r.date, r.plan_name, r.week_num, r.day,
+                     r.exercises, r.sets_logged, r.volume_kg_reps]));
   }
 
+  // personal_bests: highest weight ever logged per exercise
   if (type === 'personal_bests') {
     const rows = db.prepare(`
       SELECT e.name AS exercise, e.muscle_group,
-             ls.weight_used AS weight_kg, ls.reps_done AS reps, s.date
+             ls.weight_used AS max_weight_kg, ls.reps_done AS reps, s.date
       FROM logged_sets ls
       JOIN sessions s  ON s.id  = ls.session_id
       JOIN exercises e ON e.id  = ls.exercise_id
@@ -170,20 +176,23 @@ router.get('/export', (req, res) => {
     `).all(...P, ...P);
     return sendCsv(res, `personal-bests${slug}.csv`,
       ['exercise','muscle_group','max_weight_kg','reps','date'],
-      rows.map(r => [r.exercise, r.muscle_group, r.weight_kg, r.reps, r.date]));
+      rows.map(r => [r.exercise, r.muscle_group, r.max_weight_kg, r.reps, r.date]));
   }
 
+  // weekly_volume: total volume per calendar week
   if (type === 'weekly_volume') {
     const rows = db.prepare(`
       SELECT ${WEEK_OF} AS week_start,
-             ROUND(SUM(ls.weight_used * ls.reps_done)) AS volume_kg_reps
+             ROUND(SUM(ls.weight_used * ls.reps_done)) AS volume_kg_reps,
+             COUNT(DISTINCT s.id) AS sessions,
+             COUNT(ls.id) AS sets_logged
       FROM sessions s JOIN logged_sets ls ON ls.session_id = s.id
       WHERE ${SCOPE} AND ls.skipped=0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
       GROUP BY week_start ORDER BY week_start
     `).all(...P);
     return sendCsv(res, `weekly-volume${slug}.csv`,
-      ['week_start','volume_kg_reps'],
-      rows.map(r => [r.week_start, r.volume_kg_reps]));
+      ['week_start','sessions','sets_logged','volume_kg_reps'],
+      rows.map(r => [r.week_start, r.sessions, r.sets_logged, r.volume_kg_reps]));
   }
 
   res.status(400).json({ error: 'Unknown export type' });

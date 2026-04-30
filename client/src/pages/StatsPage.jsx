@@ -117,10 +117,10 @@ async function downloadExport(type, scope) {
 }
 
 const EXPORTS = [
-  { type: 'exercise_history', label: 'Exercise history',  desc: 'Every logged set — date, exercise, weight, reps' },
-  { type: 'sessions',         label: 'Session summary',   desc: 'One row per workout — volume and sets logged' },
-  { type: 'personal_bests',   label: 'Personal bests',    desc: 'All-time max weight per exercise' },
-  { type: 'weekly_volume',    label: 'Weekly volume',     desc: 'Total volume (kg·reps) by week' },
+  { type: 'exercise_history', label: 'Exercise history',  desc: 'Per-exercise stats for every session — sets, max weight, volume' },
+  { type: 'sessions',         label: 'Session summary',   desc: 'One row per workout — exercises, sets, total volume' },
+  { type: 'personal_bests',   label: 'Personal bests',    desc: 'Highest weight ever logged per exercise' },
+  { type: 'weekly_volume',    label: 'Weekly volume',     desc: 'Sessions, sets, and total volume by week' },
 ];
 
 export function StatsPage() {
