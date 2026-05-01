@@ -1,10 +1,12 @@
 # FitnessTrack
 
-A self-hosted progressive overload fitness tracker designed for resistance training. Log workouts, track progression across sets and exercises, and let the algorithm handle when to increase load — no spreadsheets or subscriptions required. 
+A free, open-source, self-hosted progressive overload tracker for strength training. Log every set, track weight and rep progression across all your exercises, and let the built-in algorithm decide when to increase load — no spreadsheets, no subscriptions, no cloud required.
+
+Runs on a Raspberry Pi, a home server, or any machine with Node.js. Your data stays on your hardware.
 
 ---
 
-| <img width="398" height="768" alt="Screenshot 2026-05-01 065812 (Medium)" src="https://github.com/user-attachments/assets/d671a906-dbee-4347-8338-2f3362f584e3" /> | <img width="394" height="768" alt="Screenshot 2026-05-01 065851 (Medium)" src="https://github.com/user-attachments/assets/a42cf1b7-8edc-44d0-b97c-a6ba0022d9bd" /> | <img width="396" height="768" alt="Screenshot 2026-05-01 065734 (Medium)" src="https://github.com/user-attachments/assets/ef5f2243-1bf8-4a10-a4f2-425cf770bb6d" /><br> |
+| <img width="398" height="768" alt="FitnessTrack workout logging screen — log weight and reps per set with progressive overload targets" src="https://github.com/user-attachments/assets/d671a906-dbee-4347-8338-2f3362f584e3" /> | <img width="394" height="768" alt="FitnessTrack check-in modal — rate pain, recovery, pump and intensity to tune the next session" src="https://github.com/user-attachments/assets/a42cf1b7-8edc-44d0-b97c-a6ba0022d9bd" /> | <img width="396" height="768" alt="FitnessTrack workout plan calendar — week-by-week session grid with completion status" src="https://github.com/user-attachments/assets/ef5f2243-1bf8-4a10-a4f2-425cf770bb6d" /><br> |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 
 
@@ -23,6 +25,8 @@ A self-hosted progressive overload fitness tracker designed for resistance train
 - **Custom exercises** — create exercises not in the built-in library
 - **Weight units** — switch between kg and lbs; conversions are display-only, data is always stored in kg
 - **Dark theme** — designed for gym lighting
+
+FitnessTrack is a self-hosted alternative to apps like Hevy, Strong, and JEFIT for lifters who want full control over their data. No account required beyond your own server, no paywalled features, no ads.
 
 ---
 
