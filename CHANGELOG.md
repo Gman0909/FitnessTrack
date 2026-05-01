@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4] - 2026-05-01
+
+### Changed
+- **In-app updater is now resilient to local file drift on the deployment box.** The updater previously ran `git pull`, which aborted when files like `client/package-lock.json` had been regenerated locally (typical when `npm install` rebuilds native deps such as `better-sqlite3` on ARM). It now runs `git fetch origin && git reset --hard origin/master`, force-syncing the working tree to remote `master` on every update.
+
+---
+
 ## [1.1.3] - 2026-05-01
 
 ### Fixed

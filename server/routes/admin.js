@@ -22,7 +22,10 @@ router.post('/update', requireAuth, (req, res) => {
   res.json({ ok: true });
 
   setTimeout(() => {
-    const cmd = `git config --global --add safe.directory "${ROOT}" && git pull && "${npmBin}" install && "${npmBin}" install --prefix client && "${npmBin}" run build`;
+    // fetch + reset --hard (instead of git pull) so locally-regenerated files
+    // on the deployment box (e.g. client/package-lock.json after an npm rebuild
+    // of native deps like better-sqlite3 on ARM) don't block the update.
+    const cmd = `git config --global --add safe.directory "${ROOT}" && git fetch origin && git reset --hard origin/master && "${npmBin}" install && "${npmBin}" install --prefix client && "${npmBin}" run build`;
     exec(cmd, { cwd: ROOT }, (err, stdout, stderr) => {
       if (err) {
         updateStatus = { state: 'error', log: (stderr || err.message || stdout).trim() };
