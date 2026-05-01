@@ -18,6 +18,7 @@ export const api = {
   unlockSession:     (id)       => req('POST',   `/sessions/${id}/unlock`),
   getSessionSets:    (id)       => req('GET',    `/sessions/${id}/sets`),
   logSet:            (id, body) => req('POST',   `/sessions/${id}/sets`, body),
+  unlogSet:          (id, exerciseId, setNum) => req('DELETE', `/sessions/${id}/sets/${exerciseId}/${setNum}`),
   checkin:           (id, body) => req('POST',   `/sessions/${id}/checkin`, body),
   getCheckins:       (id)       => req('GET',    `/sessions/${id}/checkins`),
   resetCheckin:      (id, mg)   => req('DELETE', `/sessions/${id}/checkins/${encodeURIComponent(mg)}`),

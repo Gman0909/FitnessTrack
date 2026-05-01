@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3] - 2026-05-01
+
+### Fixed
+- **Untick / edit of logged sets not persisted** — clicking a logged set's tick to clear it, or editing its weight/reps after logging, only flipped the row to "idle" in the React state and never told the server. Reloading the page re-hydrated from `logged_sets` and the rows reappeared as logged. The client now calls a new `DELETE /api/sessions/:id/sets/:exercise_id/:set_num` endpoint when transitioning a set out of the logged or skipped state, and serializes any pending unlog before the next log/skip POST so a fast edit-then-retick can't race.
+
+---
+
 ## [1.1.2] - 2026-05-01
 
 ### Fixed

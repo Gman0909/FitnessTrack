@@ -442,19 +442,37 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
 
   function triggerReset() { if (isGroupCheckedIn) onResetCheckin(); }
 
+  // Track in-flight unlog so a fast re-log/re-skip doesn't race the DELETE
+  const pendingUnlogRef = useRef(null);
+
+  function unlog() {
+    setStatus('idle');
+    onUndone();
+    triggerReset();
+    pendingUnlogRef.current = api.unlogSet(sessionId, exerciseId, set.set_num).catch(() => {});
+  }
+
+  async function awaitPendingUnlog() {
+    if (pendingUnlogRef.current) {
+      await pendingUnlogRef.current;
+      pendingUnlogRef.current = null;
+    }
+  }
+
   function handleWeightChange(val) {
     setWeight(val);
-    if (status === 'logged') { setStatus('idle'); onUndone(); triggerReset(); }
+    if (status === 'logged') unlog();
   }
 
   async function handleLog() {
     if (isReadOnly) return;
-    if (status === 'logged') { setStatus('idle'); onUndone(); triggerReset(); return; }
+    if (status === 'logged') { unlog(); return; }
     const repsDone = parseInt(reps, 10);
     if (!repsDone || repsDone < 1) return;
     const weightKg = isBodyweight
       ? (bodyweightStr !== '' ? toKg(parseFloat(bodyweightStr)) : 0)
       : (weight !== '' ? toKg(parseFloat(weight)) : (set.weight ?? 0));
+    await awaitPendingUnlog();
     await api.logSet(sessionId, { exercise_id: exerciseId, set_num: set.set_num, reps_done: repsDone, skipped: 0, weight_used: weightKg });
     setStatus('logged');
     onDone();
@@ -462,7 +480,8 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
 
   async function handleSkip() {
     if (isReadOnly) return;
-    if (status === 'skipped') { setStatus('idle'); onUndone(); triggerReset(); return; }
+    if (status === 'skipped') { unlog(); return; }
+    await awaitPendingUnlog();
     await api.logSet(sessionId, { exercise_id: exerciseId, set_num: set.set_num, reps_done: null, skipped: 1, weight_used: null });
     setStatus('skipped');
     onDone();
@@ -470,7 +489,7 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
 
   function handleRepsChange(val) {
     setReps(val);
-    if (status === 'logged') { setStatus('idle'); onUndone(); triggerReset(); }
+    if (status === 'logged') unlog();
   }
 
   const pill = { display:'flex', alignItems:'center', justifyContent:'center', background:'var(--input-bg)', border:'1px solid var(--border)', borderRadius:'8px', height:'42px', fontSize:'1rem', fontWeight:'500' };

@@ -155,6 +155,16 @@ router.post('/:id/sets', (req, res) => {
   res.status(201).json({ id: lastInsertRowid });
 });
 
+router.delete('/:id/sets/:exerciseId/:setNum', (req, res) => {
+  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+
+  db.prepare(
+    'DELETE FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ?'
+  ).run(req.params.id, req.params.exerciseId, req.params.setNum);
+  res.json({ ok: true });
+});
+
 router.delete('/:id/checkins/:muscleGroup', (req, res) => {
   const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
