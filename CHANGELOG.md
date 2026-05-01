@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.1.1] - 2026-04-30
+
+### Added
+- **CSV export** in the Stats page — four downloads, all scoped to the current All time / This plan filter:
+  - **Exercise history** — one row per exercise per session (sets done, max weight, total volume)
+  - **Session summary** — one row per workout (exercises, sets, total volume)
+  - **Personal bests** — highest weight ever logged per exercise with rep count and date
+  - **Weekly volume** — sessions, sets, and total volume by calendar week
+
+### Fixed
+- Unmatched `/api/*` paths now return a `404` JSON error instead of falling through to the SPA catch-all. Previously, requests to missing API endpoints silently received `index.html` with a 200 status.
+
+### Changed
+- Default weight increment for dumbbell exercises reduced from 2 kg to 1 kg. Existing non-custom dumbbell exercises in the database are updated automatically on next server start.
+
+---
+
+## [1.1.0] - 2026-04-30
+
+### Added
+- **Unlock previous session** — the session immediately before the current slot can be unlocked for re-logging. Unlocking removes check-ins and the next-day targets written by those check-ins, so re-logging and re-checking-in produces a fresh set of targets.
+
+### Fixed
+- **Finish Workout after unlock** — when a session was unlocked and all sets were already pre-marked as logged, pressing Finish Workout did nothing. It now detects that check-ins are still pending and re-triggers the check-in flow.
+- **Session locking after re-check-in** — after completing all check-ins on an unlocked session, the page now correctly transitions to read-only mode. Previously the `isCurrent` flag was stale and the session remained editable.
+
+### Changed
+- UI contrast raised to meet WCAG AA minimums: `--dim` lightened from `#777` to `#9a9a9a`; chest/triceps and legs muscle-group accent colours brightened; badge background opacity reduced to improve legibility.
+
+---
+
 ## [1.0.9] - 2026-04-30
 
 ### Changed
