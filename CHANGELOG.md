@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.2] - 2026-05-01
+
+### Fixed
+- **Mobile auto-zoom on Add Exercise modal** — inputs and selects in the modal had no explicit `font-size`, so iOS Safari (and Firefox iOS / mobile browsers with the same heuristic) auto-zoomed the page when the search field gained focus. Inputs now render at 16px, suppressing the focus zoom.
+
+### Added
+- **Workout cell shortcuts** — clicking into a weight or reps cell now selects its existing contents so you can immediately overwrite. Pressing **Enter** with both fields filled (or just reps for bodyweight exercises) ticks the corresponding log box.
+
+### Removed
+- Unused `client/src/pages/SchedulePage.jsx` — superseded by `PlanDetailPage` and no longer routed.
+
+---
+
 ## [1.1.1] - 2026-04-30
 
 ### Added
