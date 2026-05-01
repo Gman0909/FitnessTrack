@@ -26,6 +26,24 @@ A self-hosted progressive overload fitness tracker designed for resistance train
 
 ---
 
+## Contents
+
+- [How the algorithm works](#how-the-algorithm-works)
+- [Tech stack](#tech-stack)
+- [Installation](#installation)
+  - [Option 1 — Docker](#option-1--docker-recommended-for-all-platforms)
+  - [Option 2 — Raspberry Pi (native)](#option-2--raspberry-pi-native-no-docker)
+  - [Option 3 — Windows (native)](#option-3--windows-native-no-docker)
+  - [Option 4 — Development setup](#option-4--development-setup)
+- [Configuration](#configuration)
+- [Remote access](#remote-access)
+- [HTTPS](#https-self-hosted-lan-or-public)
+- [First run](#first-run)
+- [Updating](#updating)
+- [Data](#data)
+
+---
+
 ## How the algorithm works
 
 After every muscle group is logged, a check-in modal collects four ratings. Those ratings are summed into a single **modifier** that shapes the next session's targets.
