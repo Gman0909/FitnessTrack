@@ -258,7 +258,10 @@ router.get('/:id/calendar', (req, res) => {
     GROUP BY s.id
   `);
 
-  const slotDone = s => s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
+  // A session is only "done" when explicitly checked in. Mirrors the predicate
+  // in routes/sessions.js — both must stay identical or the current-slot
+  // calculation diverges (per CLAUDE.md).
+  const slotDone = s => s && !s.unlocked && s.checked_in === 1;
 
   const getWeekDates = db.prepare(`
     SELECT MIN(date) as start_date, MAX(date) as end_date

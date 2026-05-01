@@ -40,7 +40,11 @@ router.get('/slot', (req, res) => {
     WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
   `);
 
-  const slotDone = s => s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets));
+  // A session is only "done" when explicitly checked in. The previous
+  // "done_sets >= expected_sets" fallback let Finish-Workout auto-skip
+  // the entire session past the check-in modal — no algorithm run, no
+  // set_targets update.
+  const slotDone = s => s && !s.unlocked && s.checked_in === 1;
 
   // Find current slot: first (week, dow) in sequence not yet workout-complete
   const maxScan   = Math.max(plan.week_count ?? 4, weekNum) + 1;

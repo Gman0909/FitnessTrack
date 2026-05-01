@@ -420,77 +420,15 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
 
 // ── Set row ────────────────────────────────────────────────────────────────────
 
-function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone, onResetCheckin, onValuesChange, resetCounter = 0, initialStatus = 'idle', initialReps = '', isBodyweight = false, bodyweightStr = '', isReadOnly = false }) {
-  const { unit, toKg } = useUnit();
-
-  // Initialise weight in the user's display unit so they edit in familiar numbers
-  const [weight, setWeight] = useState(() => {
-    if (isBodyweight || set.weight == null) return '';
-    return unit === 'lbs' ? String(parseFloat((set.weight * 2.2046).toFixed(1))) : String(set.weight);
-  });
-  const [reps, setReps]     = useState(initialReps);
-  const [status, setStatus] = useState(initialStatus);
-
-  useEffect(() => {
-    onValuesChange?.(isBodyweight ? bodyweightStr : weight, reps, status);
-  }, [weight, reps, status, bodyweightStr]); // eslint-disable-line
-
-  useEffect(() => {
-    if (!resetCounter) return;
-    setStatus('idle');
-  }, [resetCounter]); // eslint-disable-line
-
-  function triggerReset() { if (isGroupCheckedIn) onResetCheckin(); }
-
-  // Track in-flight unlog so a fast re-log/re-skip doesn't race the DELETE
-  const pendingUnlogRef = useRef(null);
-
-  function unlog() {
-    setStatus('idle');
-    onUndone();
-    triggerReset();
-    pendingUnlogRef.current = api.unlogSet(sessionId, exerciseId, set.set_num).catch(() => {});
-  }
-
-  async function awaitPendingUnlog() {
-    if (pendingUnlogRef.current) {
-      await pendingUnlogRef.current;
-      pendingUnlogRef.current = null;
-    }
-  }
-
-  function handleWeightChange(val) {
-    setWeight(val);
-    if (status === 'logged') unlog();
-  }
-
-  async function handleLog() {
-    if (isReadOnly) return;
-    if (status === 'logged') { unlog(); return; }
-    const repsDone = parseInt(reps, 10);
-    if (!repsDone || repsDone < 1) return;
-    const weightKg = isBodyweight
-      ? (bodyweightStr !== '' ? toKg(parseFloat(bodyweightStr)) : 0)
-      : (weight !== '' ? toKg(parseFloat(weight)) : (set.weight ?? 0));
-    await awaitPendingUnlog();
-    await api.logSet(sessionId, { exercise_id: exerciseId, set_num: set.set_num, reps_done: repsDone, skipped: 0, weight_used: weightKg });
-    setStatus('logged');
-    onDone();
-  }
-
-  async function handleSkip() {
-    if (isReadOnly) return;
-    if (status === 'skipped') { unlog(); return; }
-    await awaitPendingUnlog();
-    await api.logSet(sessionId, { exercise_id: exerciseId, set_num: set.set_num, reps_done: null, skipped: 1, weight_used: null });
-    setStatus('skipped');
-    onDone();
-  }
-
-  function handleRepsChange(val) {
-    setReps(val);
-    if (status === 'logged') unlog();
-  }
+// Controlled component — status / weight / reps are owned by the parent
+// (TodayPage's setStatuses Map). All actions go through callbacks; no local
+// state, no refs, no liveValues. This eliminates stale-state-after-reload bugs.
+function SetRow({
+  set, isBodyweight, bodyweightStr, isReadOnly,
+  status, weight, reps,
+  onWeightChange, onRepsChange, onClickTick, onClickUndo,
+}) {
+  const { unit } = useUnit();
 
   const pill = { display:'flex', alignItems:'center', justifyContent:'center', background:'var(--input-bg)', border:'1px solid var(--border)', borderRadius:'8px', height:'42px', fontSize:'1rem', fontWeight:'500' };
 
@@ -498,7 +436,7 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       <div style={{ ...pill, color:'var(--dim)', gridColumn: isBodyweight ? '1/2' : '1/3', justifyContent:'flex-start', paddingLeft:'0.75rem' }}>
         <span style={{ fontSize:'0.85rem', color:'var(--dim)' }}>Set {set.set_num} — Skipped</span>
-        {!isReadOnly && <button type="button" onClick={handleSkip} style={{ marginLeft:'auto', marginRight:'0.5rem', background:'none', border:'none', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline' }}>Undo</button>}
+        {!isReadOnly && <button type="button" onClick={onClickUndo} style={{ marginLeft:'auto', marginRight:'0.5rem', background:'none', border:'none', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline' }}>Undo</button>}
       </div>
       <div style={{ width:'44px', height:'44px' }} />
     </div>
@@ -518,26 +456,26 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
     if (!weightPresent) return;
     e.preventDefault();
     e.target.blur();
-    handleLog();
+    onClickTick();
   };
 
   return (
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       {!isBodyweight && (
-        <input type="number" value={weight} onChange={e => handleWeightChange(e.target.value)}
+        <input type="number" value={weight} onChange={e => onWeightChange(e.target.value)}
           onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
           placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
           disabled={isReadOnly}
           style={inputStyle}
         />
       )}
-      <input type="number" value={reps} onChange={e => handleRepsChange(e.target.value)}
+      <input type="number" value={reps} onChange={e => onRepsChange(e.target.value)}
         onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
         placeholder={String(set.reps)} min="1" max="999"
         disabled={isReadOnly}
         style={inputStyle}
       />
-      <div onClick={canLog ? handleLog : undefined}
+      <div onClick={canLog ? onClickTick : undefined}
         style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0,
           cursor: isReadOnly ? 'default' : canLog ? 'pointer' : 'default',
           border:`2px solid ${isLogged ? 'var(--success)' : canLog ? 'var(--muted)' : 'var(--border)'}`,
@@ -664,11 +602,15 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
 // ── Exercise card ──────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetUndone, onResetCheckin, onAddSet, onRemoveSet, onSetValuesChange, resetCounter, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, doneSet, initials, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
-  const { unit, display } = useUnit();
+function ExerciseCard({ exercise, isGroupCheckedIn, onResetCheckin, onAddSet, onRemoveSet, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
+  const { unit } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
-  const lastSetDone = doneSet.has(`${exercise.exercise_id}-${exercise.sets.length}`);
+  const isSetDone   = (setNum) => {
+    const st = getStatus(exercise.exercise_id, setNum);
+    return st.status === 'logged' || st.status === 'skipped';
+  };
+  const lastSetDone = isSetDone(exercise.sets.length);
 
   // Volume hint: total session volume (weight × reps across all sets), current vs previous targets
   let volumeHint = null;
@@ -723,7 +665,7 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
       </div>
 
       {isBodyweight && (() => {
-        const bwLocked = exercise.sets.some(s => doneSet.has(`${exercise.exercise_id}-${s.set_num}`));
+        const bwLocked = exercise.sets.some(s => isSetDone(s.set_num));
         return (
           <div style={{ marginBottom:'0.75rem' }}>
             <div style={{ fontSize:'0.75rem', color:'var(--muted)', marginBottom:'4px' }}>Bodyweight</div>
@@ -749,22 +691,19 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
       </div>
 
       {exercise.sets.map(set => {
-        const initKey = `${exercise.exercise_id}-${set.set_num}`;
-        const init    = initials?.get(initKey);
+        const st = getStatus(exercise.exercise_id, set.set_num);
         return (
           <SetRow key={set.set_num} set={set}
-            exerciseId={exercise.exercise_id} sessionId={sessionId}
-            isGroupCheckedIn={isGroupCheckedIn}
-            onDone={() => onSetDone(exercise.exercise_id, set.set_num)}
-            onUndone={() => onSetUndone(exercise.exercise_id, set.set_num)}
-            onResetCheckin={onResetCheckin}
-            onValuesChange={(w, r, s) => onSetValuesChange?.(set.set_num, w, r, s)}
-            resetCounter={resetCounter}
-            initialStatus={init?.status ?? 'idle'}
-            initialReps={init?.reps ?? ''}
             isBodyweight={isBodyweight}
             bodyweightStr={bodyweightStr}
             isReadOnly={isReadOnly}
+            status={st.status}
+            weight={st.weight}
+            reps={st.reps}
+            onWeightChange={(val) => onWeightChange(exercise.exercise_id, set.set_num, val)}
+            onRepsChange={(val) => onRepsChange(exercise.exercise_id, set.set_num, val)}
+            onClickTick={() => onClickTick(exercise.exercise_id, set.set_num)}
+            onClickUndo={() => onClickUndo(exercise.exercise_id, set.set_num)}
           />
         );
       })}
@@ -795,7 +734,7 @@ function ExerciseCard({ exercise, sessionId, isGroupCheckedIn, onSetDone, onSetU
 // ── Today page ─────────────────────────────────────────────────────────────────
 
 export default function TodayPage() {
-  const { toKg, display } = useUnit();
+  const { unit, toKg, display } = useUnit();
   const navigate = useNavigate();
 
   // Plan & navigation
@@ -816,22 +755,27 @@ export default function TodayPage() {
   // Session & exercises
   const [session, setSession]       = useState(null);
   const [exercises, setExercises]   = useState([]);
-  const [initials, setInitials]     = useState(new Map());
 
-  // Logging state
-  const [doneSet, setDoneSet]           = useState(new Set());
+  // Per-set status, weight, reps. Single source of truth — replaces the old
+  // doneSet (Set) + initials (Map) + liveValues (ref) + SetRow local state.
+  // Key: `${exerciseId}-${setNum}`. Value: { status, weight, reps }.
+  // - status: 'idle' | 'logged' | 'skipped'
+  // - weight: string in display unit (kg or lbs)
+  // - reps: string (raw input)
+  const [setStatuses, setSetStatuses] = useState(new Map());
+
+  // Check-in state
   const [checkedInGroups, setCheckedIn] = useState(new Set());
   const [pendingCheckin, setPending]    = useState(null);
   const [dismissedGroups, setDismissed] = useState(new Set());
 
   // Finish workout
-  const liveValues = useRef(new Map());
   const [reloadKey, setReloadKey]       = useState(0);
   const [finishModal, setFinishModal]   = useState(null);
   const [skipConfirm, setSkipConfirm]   = useState(false);
-
-  // Per-exercise reset counters (incremented to signal SetRows to untick)
-  const [exerciseResetCounters, setExerciseResetCounters] = useState({});
+  // One-shot flag: when set, the next loadSlot skips preDismiss (signalling
+  // "user explicitly clicked Finish, don't silence the check-in modals").
+  const skipPreDismissOnceRef = useRef(false);
 
   // Per-exercise bodyweight input (propagates forward to subsequent BW exercises)
   const [bodyweightValues, setBodyweightValues] = useState(new Map());
@@ -877,9 +821,8 @@ export default function TodayPage() {
     if (!selectedSlot || !activePlan) return;
 
     async function loadSlot() {
-      liveValues.current.clear();
       setSessLoading(true);
-      setDoneSet(new Set());
+      setSetStatuses(new Map());
       setCheckedIn(new Set());
       setPending(null);
       setDismissed(new Set());
@@ -898,10 +841,23 @@ export default function TodayPage() {
       setIsCurrent(is_current);
       setExercises(exs);
 
-      const initMap  = new Map();
-      const initDone = new Set();
-      const checkinSet = new Set();
+      // Build per-set status from schedule defaults + server-side logged_sets.
+      // Schedule provides target weight (in kg). Logged sets override status,
+      // weight, reps. Weights are stored in the user's display unit.
+      const toDisplay = kg => unit === 'lbs'
+        ? String(parseFloat((kg * 2.2046).toFixed(1)))
+        : String(kg);
+      const statuses = new Map();
+      for (const ex of exs) {
+        for (const s of ex.sets) {
+          const dispWeight = (ex.equipment !== 'bodyweight' && s.weight != null)
+            ? toDisplay(s.weight)
+            : '';
+          statuses.set(`${ex.exercise_id}-${s.set_num}`, { status: 'idle', weight: dispWeight, reps: '' });
+        }
+      }
 
+      const checkinSet = new Set();
       if (sess) {
         const [loggedSets, checkinGroups] = await Promise.all([
           api.getSessionSets(sess.id),
@@ -909,20 +865,42 @@ export default function TodayPage() {
         ]);
         for (const ls of loggedSets) {
           const key = `${ls.exercise_id}-${ls.set_num}`;
-          if (ls.skipped) { initMap.set(key, { status: 'skipped', reps: '' }); initDone.add(key); }
-          else if (ls.reps_done != null) { initMap.set(key, { status: 'logged', reps: String(ls.reps_done) }); initDone.add(key); }
+          const cur = statuses.get(key) ?? { status: 'idle', weight: '', reps: '' };
+          if (ls.skipped) {
+            statuses.set(key, { ...cur, status: 'skipped' });
+          } else if (ls.reps_done != null) {
+            const dispWeight = (ls.weight_used != null && ls.weight_used > 0)
+              ? toDisplay(ls.weight_used)
+              : cur.weight;
+            statuses.set(key, { status: 'logged', weight: dispWeight, reps: String(ls.reps_done) });
+          }
         }
         for (const g of checkinGroups) checkinSet.add(g);
       }
 
-      // Pre-dismiss groups that are fully done so check-in modal doesn't fire on past slots
+      // Pre-dismiss groups that are already fully done. Two cases:
+      //   - Past (non-current) slots: never pop modals on read-only views.
+      //   - Unlocked sessions: the user explicitly unlocked to edit something,
+      //     not to redo every check-in. Modals should only fire after they
+      //     touch a set (handleLog / handleClear remove the group from
+      //     dismissedGroups, so re-completing the group re-fires the modal).
+      // Exception: if the user just clicked Finish Workout, they've explicitly
+      // committed to the check-in flow — don't silence anything this reload.
+      const skipPreDismiss = skipPreDismissOnceRef.current;
+      skipPreDismissOnceRef.current = false;
+      const shouldPreDismiss = !skipPreDismiss && (!is_current || sess?.unlocked === 1);
       const preDismissed = new Set();
-      for (const g of groupByMuscle(exs)) {
-        if (!checkinSet.has(g.muscle_group)) {
-          const allLogged = g.exercises.every(ex =>
-            ex.sets.every(s => initDone.has(`${ex.exercise_id}-${s.set_num}`))
-          );
-          if (allLogged) preDismissed.add(g.muscle_group);
+      if (shouldPreDismiss) {
+        for (const g of groupByMuscle(exs)) {
+          if (!checkinSet.has(g.muscle_group)) {
+            const allDone = g.exercises.every(ex =>
+              ex.sets.every(s => {
+                const st = statuses.get(`${ex.exercise_id}-${s.set_num}`);
+                return st && (st.status === 'logged' || st.status === 'skipped');
+              })
+            );
+            if (allDone) preDismissed.add(g.muscle_group);
+          }
         }
       }
 
@@ -933,8 +911,7 @@ export default function TodayPage() {
         if (ex.equipment === 'bodyweight') bwMap.set(ex.exercise_id, storedBW);
       }
 
-      setInitials(initMap);
-      setDoneSet(initDone);
+      setSetStatuses(statuses);
       setCheckedIn(checkinSet);
       setDismissed(preDismissed);
       setBodyweightValues(bwMap);
@@ -949,15 +926,31 @@ export default function TodayPage() {
 
   const groups = groupByMuscle(exercises);
 
-  function groupIsDone(group) {
-    return group.exercises.every(ex => ex.sets.every(s => doneSet.has(`${ex.exercise_id}-${s.set_num}`)));
+  // Per-set status helpers — read from the lifted setStatuses Map.
+  const getStatus = useCallback((exId, setNum) => {
+    return setStatuses.get(`${exId}-${setNum}`) ?? { status: 'idle', weight: '', reps: '' };
+  }, [setStatuses]);
+
+  function patchStatus(exId, setNum, patch) {
+    setSetStatuses(prev => {
+      const key = `${exId}-${setNum}`;
+      const n = new Map(prev);
+      n.set(key, { ...(n.get(key) ?? { status: 'idle', weight: '', reps: '' }), ...patch });
+      return n;
+    });
   }
 
-  // Only fire check-in modals for groups with at least one real logged set.
-  // liveValues is kept current by SetRow's onValuesChange effect.
+  function groupIsDone(group) {
+    return group.exercises.every(ex => ex.sets.every(s => {
+      const st = getStatus(ex.exercise_id, s.set_num);
+      return st.status === 'logged' || st.status === 'skipped';
+    }));
+  }
+
+  // Groups whose sets are all skipped don't need a check-in modal.
   function groupHasLoggedSets(group) {
     return group.exercises.some(ex =>
-      ex.sets.some(s => liveValues.current.get(`${ex.exercise_id}-${s.set_num}`)?.status === 'logged')
+      ex.sets.some(s => getStatus(ex.exercise_id, s.set_num).status === 'logged')
     );
   }
 
@@ -973,13 +966,12 @@ export default function TodayPage() {
 
   const isReadOnly = !isCurrent;
 
-  // The slot immediately before the current slot — the only one eligible for unlock
+  // The slot immediately before the current slot — the only one eligible for unlock.
+  // Server's slotDone now requires checked_in === 1, so this matches.
   const isUnlockable = (() => {
     if (!calendarData?.weeks || !selectedSlot || isCurrent || isLocked) return false;
     if (session?.unlocked) return false;
-    const sessionIsDone = session?.checked_in === 1 ||
-      (session?.done_sets > 0 && session?.done_sets >= session?.expected_sets);
-    if (!sessionIsDone) return false;
+    if (session?.checked_in !== 1) return false;
     const flat = calendarData.weeks.flatMap(w => w.days.map(d => ({ weekNum: w.week_num, dow: d.day_of_week, is_current: d.is_current })));
     const curIdx = flat.findIndex(s => s.is_current);
     if (curIdx <= 0) return false;
@@ -987,9 +979,11 @@ export default function TodayPage() {
     return prev.weekNum === selectedSlot.weekNum && prev.dow === selectedSlot.dow;
   })();
 
-  const allDone = session?.checked_in === 1 ||
-    (groups.length > 0 && groups.every(g => checkedInGroups.has(g.muscle_group))) ||
-    (isReadOnly && (session?.expected_sets ?? 0) > 0 && (session?.done_sets ?? 0) >= (session?.expected_sets ?? 0));
+  // A session is "all done" iff the server says so (checked_in === 1).
+  // Per-group local check-ins are tracked client-side, but the authoritative
+  // source for "complete" is the server flag, refreshed via setReloadKey when
+  // all groups requiring a check-in are checked in.
+  const allDone = session?.checked_in === 1;
 
   // ── Auto-trigger check-in ─────────────────────────────────────────────────────
 
@@ -1002,53 +996,110 @@ export default function TodayPage() {
       groupHasLoggedSets(g)
     );
     if (next) setPending(next.muscle_group);
+  }, [setStatuses, pendingCheckin, checkedInGroups, dismissedGroups]); // eslint-disable-line
 
-    // Sweep all-skipped done groups into checkedInGroups so the existing
-    // allDone derived state settles without each one needing a server-side
-    // check-in row.
-    const skippedDone = groups.filter(g =>
-      groupIsDone(g) &&
-      !checkedInGroups.has(g.muscle_group) &&
-      !groupHasLoggedSets(g)
-    );
-    if (skippedDone.length > 0) {
-      setCheckedIn(prev => {
-        const n = new Set(prev);
-        for (const g of skippedDone) n.add(g.muscle_group);
-        return n;
-      });
+  // ── Per-set actions ───────────────────────────────────────────────────────────
+
+  // Reset a group's server-side check-in. Used when the user edits or unticks
+  // a logged set in a group that was already checked in.
+  async function resetGroupCheckinIfAny(muscleGroup) {
+    if (!session?.id) return;
+    if (!checkedInGroups.has(muscleGroup)) return;
+    await api.resetCheckin(session.id, muscleGroup).catch(() => {});
+    setCheckedIn(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
+    setDismissed(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
+  }
+
+  // Remove a group from dismissedGroups when the user actively logs / clears.
+  // Needed so that after an unlock (where loadSlot pre-dismisses every group),
+  // re-completing a group re-fires its check-in modal.
+  function markGroupActive(muscleGroup) {
+    setDismissed(prev => {
+      if (!prev.has(muscleGroup)) return prev;
+      const n = new Set(prev);
+      n.delete(muscleGroup);
+      return n;
+    });
+  }
+
+  async function handleLog(exId, setNum) {
+    if (!session?.id || isReadOnly) return;
+    const ex  = exercises.find(e => e.exercise_id === exId);
+    if (!ex) return;
+    const set = ex.sets.find(s => s.set_num === setNum);
+    const cur = getStatus(exId, setNum);
+    const repsDone = parseInt(cur.reps, 10);
+    if (!repsDone || repsDone < 1) return;
+    const isBW = ex.equipment === 'bodyweight';
+    const bwStr = bodyweightValues.get(exId);
+    const weightKg = isBW
+      ? (bwStr !== '' && bwStr != null ? toKg(parseFloat(bwStr)) : 0)
+      : (cur.weight !== '' ? toKg(parseFloat(cur.weight)) : (set?.weight ?? 0));
+    // Optimistic flip
+    patchStatus(exId, setNum, { status: 'logged' });
+    markGroupActive(ex.muscle_group);
+    try {
+      await api.logSet(session.id, { exercise_id: exId, set_num: setNum, reps_done: repsDone, skipped: 0, weight_used: weightKg });
+    } catch {
+      patchStatus(exId, setNum, { status: 'idle' });
     }
-  }, [doneSet, pendingCheckin, checkedInGroups, dismissedGroups]); // eslint-disable-line
+  }
 
-  // ── Callbacks ─────────────────────────────────────────────────────────────────
-
-  const onSetDone = useCallback((exId, setNum) => {
-    setDoneSet(prev => new Set([...prev, `${exId}-${setNum}`]));
-  }, []);
-
-  const onSetUndone = useCallback((exId, setNum) => {
-    setDoneSet(prev => { const n = new Set(prev); n.delete(`${exId}-${setNum}`); return n; });
+  async function handleClear(exId, setNum) {
+    if (!session?.id || isReadOnly) return;
     const ex = exercises.find(e => e.exercise_id === exId);
-    if (ex) setDismissed(prev => { const n = new Set(prev); n.delete(ex.muscle_group); return n; });
-  }, [exercises]);
+    // Optimistic
+    patchStatus(exId, setNum, { status: 'idle' });
+    if (ex) {
+      markGroupActive(ex.muscle_group);
+      await resetGroupCheckinIfAny(ex.muscle_group);
+    }
+    api.unlogSet(session.id, exId, setNum).catch(() => {});
+  }
+
+  async function handleClickTick(exId, setNum) {
+    const cur = getStatus(exId, setNum);
+    if (cur.status === 'logged') return handleClear(exId, setNum);
+    return handleLog(exId, setNum);
+  }
+
+  async function handleClickUndo(exId, setNum) {
+    return handleClear(exId, setNum);
+  }
+
+  function handleWeightChange(exId, setNum, val) {
+    patchStatus(exId, setNum, { weight: val });
+    const cur = getStatus(exId, setNum);
+    if (cur.status === 'logged') handleClear(exId, setNum);
+  }
+
+  function handleRepsChange(exId, setNum, val) {
+    patchStatus(exId, setNum, { reps: val });
+    const cur = getStatus(exId, setNum);
+    if (cur.status === 'logged') handleClear(exId, setNum);
+  }
+
+  // ── Check-in callbacks ────────────────────────────────────────────────────────
 
   const onCheckin = useCallback((muscleGroup) => {
     setCheckedIn(prev => new Set([...prev, muscleGroup]));
     setPending(null);
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
 
-    // Detect end-of-plan: all groups checked in AND this is the last calendar slot
+    // Reload slot when all groups *requiring* a check-in have one. All-skipped
+    // groups don't need check-in rows (server filters them out), so we only
+    // wait on groups with logged sets.
     const updatedGroups = new Set([...checkedInGroups, muscleGroup]);
-    if (groups.every(g => updatedGroups.has(g.muscle_group))) {
+    const groupsNeedingCheckin = groups.filter(groupHasLoggedSets);
+    if (groupsNeedingCheckin.every(g => updatedGroups.has(g.muscle_group))) {
       const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
       const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
       if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow) {
         setEndOfPlanModal(true);
       }
-      // Reload slot so isCurrent reflects the server state (session is done, next slot becomes current)
       setReloadKey(k => k + 1);
     }
-  }, [activePlan, groups, checkedInGroups, calendarData, selectedSlot]);
+  }, [activePlan, groups, checkedInGroups, calendarData, selectedSlot, setStatuses]);
 
   function handleClosePending() {
     setDismissed(prev => new Set([...prev, pendingCheckin]));
@@ -1060,19 +1111,10 @@ export default function TodayPage() {
     await api.resetCheckin(session.id, muscleGroup);
     setCheckedIn(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
     setDismissed(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
-    // Untick all sets in this muscle group and remove from doneSet
-    const groupExs = exercises.filter(ex => ex.muscle_group === muscleGroup);
-    setDoneSet(prev => {
-      const n = new Set(prev);
-      for (const ex of groupExs) for (const s of ex.sets) n.delete(`${ex.exercise_id}-${s.set_num}`);
-      return n;
-    });
-    setExerciseResetCounters(prev => {
-      const n = { ...prev };
-      for (const ex of groupExs) n[ex.exercise_id] = (n[ex.exercise_id] ?? 0) + 1;
-      return n;
-    });
-  }, [session, exercises]);
+    // Don't untick the group's individual sets — they remain logged on the
+    // server. The auto-checkin effect will simply re-fire the modal so the
+    // user can submit fresh feedback.
+  }, [session]);
 
   // ── Drag reorder ──────────────────────────────────────────────────────────────
 
@@ -1104,7 +1146,8 @@ export default function TodayPage() {
   async function onRemoveSet(exerciseId) {
     const ex = exercises.find(e => e.exercise_id === exerciseId);
     if (!ex || ex.sets.length <= 1) return;
-    if (doneSet.has(`${exerciseId}-${ex.sets.length}`)) return;
+    const lastSt = getStatus(exerciseId, ex.sets.length);
+    if (lastSt.status === 'logged' || lastSt.status === 'skipped') return;
     setExercises(prev => prev.map(e => e.exercise_id !== exerciseId ? e : { ...e, set_count: e.set_count - 1, sets: e.sets.slice(0, -1) }));
     await api.updatePlanSlot(ex.plan_id, ex.schedule_id, { set_count: ex.set_count - 1 });
   }
@@ -1172,12 +1215,22 @@ export default function TodayPage() {
     if (!session || isReadOnly) return;
     await api.skipSession(session.id);
     setSession(s => ({ ...s, checked_in: 1 }));
-    const allKeys    = exercises.flatMap(ex => ex.sets.map(s => `${ex.exercise_id}-${s.set_num}`));
-    const allGroups  = new Set(exercises.map(ex => ex.muscle_group));
-    setDoneSet(new Set(allKeys));
-    setDismissed(prev => new Set([...prev, ...allGroups]));
+    // Mark every set as skipped locally so the UI updates immediately;
+    // the slot reload below will refetch authoritative state.
+    setSetStatuses(prev => {
+      const n = new Map(prev);
+      for (const ex of exercises) {
+        for (const s of ex.sets) {
+          const k = `${ex.exercise_id}-${s.set_num}`;
+          n.set(k, { ...(n.get(k) ?? { weight: '', reps: '' }), status: 'skipped' });
+        }
+      }
+      return n;
+    });
+    setDismissed(prev => new Set([...prev, ...exercises.map(ex => ex.muscle_group)]));
     setPending(null);
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
+    setReloadKey(k => k + 1);
   }
 
   // ── Finish workout ────────────────────────────────────────────────────────────
@@ -1186,28 +1239,27 @@ export default function TodayPage() {
     const toLog = [], toSkip = [];
     for (const ex of exercises) {
       for (const set of ex.sets) {
-        const key  = `${ex.exercise_id}-${set.set_num}`;
-        const live = liveValues.current.get(key);
-        if (live?.status === 'logged' || live?.status === 'skipped') continue;
+        const cur = getStatus(ex.exercise_id, set.set_num);
+        if (cur.status === 'logged' || cur.status === 'skipped') continue;
         const isBW      = ex.equipment === 'bodyweight';
-        const hasWeight = isBW || (live?.weight !== '' && live?.weight != null);
-        const hasReps   = live?.reps !== '' && live?.reps != null && parseInt(live.reps, 10) >= 1;
+        const hasWeight = isBW || (cur.weight !== '' && cur.weight != null);
+        const hasReps   = cur.reps !== '' && cur.reps != null && parseInt(cur.reps, 10) >= 1;
         if (hasWeight && hasReps) {
           const bwStr   = bodyweightValues.get(ex.exercise_id);
           const weightKg = isBW
             ? (bwStr ? toKg(parseFloat(bwStr)) : 0)
-            : toKg(parseFloat(live.weight));
+            : toKg(parseFloat(cur.weight));
           toLog.push({ exerciseName: ex.name, exerciseId: ex.exercise_id, setNum: set.set_num,
-            weightKg, reps: parseInt(live.reps, 10) });
+            weightKg, reps: parseInt(cur.reps, 10) });
         } else {
           toSkip.push({ exerciseName: ex.name, exerciseId: ex.exercise_id, setNum: set.set_num });
         }
       }
     }
     if (toLog.length === 0 && toSkip.length === 0) {
-      // All sets already logged — re-trigger check-in for any unchecked groups
-      // that actually have logged (non-skipped) sets. All-skipped groups are
-      // swept into checkedInGroups by the auto-checkin effect itself.
+      // Everything already accounted for — re-trigger check-in modals for any
+      // unchecked groups that have at least one logged set. All-skipped groups
+      // are silently fine (server doesn't require check-ins for them).
       const needsCheckin = groups.some(g =>
         groupIsDone(g) && !checkedInGroups.has(g.muscle_group) && groupHasLoggedSets(g)
       );
@@ -1224,6 +1276,10 @@ export default function TodayPage() {
       ...toSkip.map(item => api.logSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: null, skipped: 1, weight_used: null })),
     ]);
     setFinishModal(null);
+    // Clear dismissed locally and tell the next loadSlot not to re-apply
+    // preDismiss (e.g., on an unlocked session) — user explicitly committed.
+    setDismissed(new Set());
+    skipPreDismissOnceRef.current = true;
     setReloadKey(k => k + 1);
   }
 
@@ -1299,21 +1355,21 @@ export default function TodayPage() {
           {exercises.map(ex => (
             <ExerciseCard
               key={`${session?.id ?? `${selectedSlot?.weekNum}-${selectedSlot?.dow}`}-${ex.exercise_id}`}
-              exercise={ex} sessionId={session?.id}
+              exercise={ex}
               isGroupCheckedIn={checkedInGroups.has(ex.muscle_group)}
-              onSetDone={onSetDone} onSetUndone={onSetUndone}
               onResetCheckin={() => onResetCheckin(ex.muscle_group)}
               onAddSet={() => onAddSet(ex.exercise_id)}
               onRemoveSet={() => onRemoveSet(ex.exercise_id)}
-              onSetValuesChange={(setNum, w, r, s) => { liveValues.current.set(`${ex.exercise_id}-${setNum}`, { weight: w, reps: r, status: s }); }}
-              resetCounter={exerciseResetCounters[ex.exercise_id] ?? 0}
               isDragOver={dragOverId === ex.exercise_id}
               onDragStart={() => setDragExId(ex.exercise_id)}
               onDragOver={() => { if (dragExerciseId && dragExerciseId !== ex.exercise_id) setDragOverId(ex.exercise_id); }}
               onDrop={() => handleExerciseDrop(ex.exercise_id)}
               onDragEnd={() => { setDragExId(null); setDragOverId(null); }}
-              doneSet={doneSet}
-              initials={initials}
+              getStatus={getStatus}
+              onWeightChange={handleWeightChange}
+              onRepsChange={handleRepsChange}
+              onClickTick={handleClickTick}
+              onClickUndo={handleClickUndo}
               isBodyweight={ex.equipment === 'bodyweight'}
               bodyweightStr={bodyweightValues.get(ex.exercise_id) ?? ''}
               onBodyweightChange={val => handleBodyweightChange(ex.exercise_id, val)}

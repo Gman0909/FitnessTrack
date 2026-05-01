@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.1.8] - 2026-05-01
+
+Major robustness pass on the workout-session lifecycle. Per-set state is now lifted into a single parent-managed Map (`setStatuses`) instead of being scattered across SetRow's local state, the `liveValues` ref, `doneSet`, and `initials`. SetRow is now a controlled component. Multiple stale-state-after-reload bugs are gone as a result.
+
+### Fixed
+- **Finish Workout silently bypassing the algorithm.** `slotDone` previously considered a session done if `done_sets >= expected_sets`, even with `checked_in = 0`. After Finish-Workout-into-skip, the slot rolled over without check-ins ever firing — the algorithm never ran and `set_targets` were never written. `slotDone` now requires `checked_in === 1` (in both `routes/sessions.js` and `routes/plans.js`).
+- **Finish Workout not firing check-in modals on the resulting reload.** `handleConfirmFinish` now clears `dismissedGroups` before the slot reload so the auto-checkin effect picks up immediately.
+- **Mixed groups (some logged, some skipped) not consistently triggering check-ins.** The previous `groupHasLoggedSets` predicate read from `liveValues`, a ref that was empty after every reload (SetRow's `onValuesChange` effect didn't re-fire). It now reads from server-truth via `setStatuses`.
+- **`onCheckin` reload trigger waiting on every group.** It now waits only on groups that actually need a check-in (i.e., have at least one logged set). All-skipped groups don't block lock-in.
+- **Unlock spamming every check-in modal immediately.** `loadSlot` now pre-dismisses done groups when `sess.unlocked === 1`. Modals only fire after the user actively engages with a set.
+- **Re-engagement after unlock not opening modals.** `handleLog` and `handleClear` now call `markGroupActive` to remove the affected group from `dismissedGroups`, so re-completing the group fires the modal.
+- **Unlock → untick → Finish requiring two Finish presses to lock.** `handleConfirmFinish` now sets a one-shot `skipPreDismissOnceRef` flag so the post-Finish reload does not re-apply the unlocked-session pre-dismiss. Single Finish press now drives the full check-in flow.
+- **Logged weight not restored on reload.** Previously SetRow showed the *target* weight after reload even for logged sets. `loadSlot` now overlays the per-set `weight_used` from `logged_sets` into `setStatuses`.
+- **Editing one set in a checked-in group unticking the rest.** `onResetCheckin` no longer resets every set in the group — it only deletes the server-side check-in row + clears the group's local check-in flag. Other sets in the group stay logged.
+
+### Changed
+- **`SetRow` is now a controlled component.** Its `status` / `weight` / `reps` come from props; it has no local state, no refs, no internal effects. All mutations flow through parent callbacks (`onClickTick`, `onClickUndo`, `onWeightChange`, `onRepsChange`).
+- **Internal: `doneSet`, `liveValues`, `exerciseResetCounters`, and the `initials` map are removed** in favour of a single `setStatuses: Map<string, { status, weight, reps }>` in the parent. `groupIsDone` and `groupHasLoggedSets` derive from it.
+- **`preDismissed` only runs on past slots or unlocked sessions** (not on the current slot in normal flow).
+
+---
+
 ## [1.1.7] - 2026-05-01
 
 ### Fixed
