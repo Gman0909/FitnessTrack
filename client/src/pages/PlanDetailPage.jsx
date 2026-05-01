@@ -110,7 +110,7 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
     }
   }
 
-  const inputStyle = { padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)' };
+  const inputStyle = { padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px' };
   const overlay    = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 };
   const sheet      = { background: 'var(--surface2)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '640px', padding: '1.25rem', paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' };
 
