@@ -1,6 +1,6 @@
 # FitnessTrack
 
-A self-hosted progressive overload fitness tracker. Log workouts, track weight progression across sets and exercises, and let the algorithm handle when to increase load — no spreadsheets required.
+A self-hosted progressive overload fitness tracker designed for resistance trainint. Log workouts, track progression across sets and exercises, and let the algorithm handle when to increase load — no spreadsheets or subscriptions required. 
 
 ---
 
