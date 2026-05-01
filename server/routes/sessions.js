@@ -152,6 +152,17 @@ router.post('/:id/sets', (req, res) => {
   const { lastInsertRowid } = db.prepare(
     'INSERT INTO logged_sets (session_id, exercise_id, set_num, reps_done, skipped, weight_used) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(req.params.id, exercise_id, set_num, reps_done ?? null, skipped ? 1 : 0, weight_used ?? null);
+
+  // If this is the first live set logged into the session, stamp the session's
+  // date to today. Sessions are otherwise dated at creation time, which is when
+  // the user first navigated to the slot — that's not the workout's actual date.
+  const liveCount = db.prepare(
+    'SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
+  ).get(req.params.id).n;
+  if (liveCount === 1) {
+    db.prepare("UPDATE sessions SET date = date('now') WHERE id = ?").run(req.params.id);
+  }
+
   res.status(201).json({ id: lastInsertRowid });
 });
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.5] - 2026-05-01
+
+### Fixed
+- **Sets logged today appearing under an old date in Stats.** A session's `date` was stamped when the row was first created — i.e., when you first navigated to that slot — not when sets were actually logged. If you opened a slot on day X and didn't log into it until day Y, every set in that session showed under day X in Stats. The session's date is now stamped on the first real log into it (insert path only — editing an already-logged set won't shift the date).
+
+---
+
 ## [1.1.4] - 2026-05-01
 
 ### Changed
