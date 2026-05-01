@@ -490,16 +490,30 @@ function SetRow({ set, exerciseId, sessionId, isGroupCheckedIn, onDone, onUndone
   const inputStyle = { ...pill, width:'100%', color:'var(--text)', outline:'none', textAlign:'center', padding:0,
     borderColor: isLogged ? 'var(--success)' : 'var(--border)', opacity: isReadOnly ? 0.6 : 1 };
 
+  const handleFocusSelect = e => e.target.select();
+  const handleKeyDown = e => {
+    if (e.key !== 'Enter' || isReadOnly || isLogged) return;
+    const repsDone = parseInt(reps, 10);
+    if (!repsDone || repsDone < 1) return;
+    const weightPresent = isBodyweight ? bodyweightStr !== '' : weight !== '';
+    if (!weightPresent) return;
+    e.preventDefault();
+    e.target.blur();
+    handleLog();
+  };
+
   return (
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       {!isBodyweight && (
         <input type="number" value={weight} onChange={e => handleWeightChange(e.target.value)}
+          onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
           placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
           disabled={isReadOnly}
           style={inputStyle}
         />
       )}
       <input type="number" value={reps} onChange={e => handleRepsChange(e.target.value)}
+        onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
         placeholder={String(set.reps)} min="1" max="999"
         disabled={isReadOnly}
         style={inputStyle}
