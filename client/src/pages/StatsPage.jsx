@@ -18,6 +18,18 @@ function fmtWeek(str) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
+// Weekly chart bars are anchored on the Monday of each week. Showing only that
+// Monday's date on the axis was misread as "the workout was on April 27" when
+// the workout was really on Friday May 1 (same week). The range form makes the
+// week-aggregation explicit.
+function fmtWeekRange(str) {
+  const start = new Date(str + 'T00:00:00Z');
+  const end   = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${fmt(start)}–${fmt(end)}`;
+}
+
 function Section({ title }) {
   return (
     <h3 style={{ margin: '1.75rem 0 0.65rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)' }}>
@@ -159,7 +171,7 @@ export function StatsPage() {
   const volScale = unit === 'lbs' ? 2.2046 : 1;
   const volUnit  = unit === 'lbs' ? 'lbs' : 'kg';
 
-  const volData  = weekly_volume.map(r => ({ week: fmtWeek(r.week_start), vol: Math.round(r.volume * volScale) }));
+  const volData  = weekly_volume.map(r => ({ week: fmtWeekRange(r.week_start), vol: Math.round(r.volume * volScale) }));
   const sessData = session_volume.map(r => ({ date: fmtWeek(r.date), vol: Math.round(r.volume * volScale) }));
   const pieData  = muscle_volume.map(r => ({ name: r.muscle_group, value: Math.round(r.volume * volScale) }));
   const pieTotal = pieData.reduce((s, r) => s + r.value, 0);

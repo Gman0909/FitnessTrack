@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.6] - 2026-05-01
+
+### Changed
+- **Weekly Volume chart now labels bars with the full week range** (`Apr 27–May 3` instead of `Apr 27`). The bar always was the Monday-anchored week, but the bare Monday date was easy to misread as "the workout was on April 27" when the workout was really on Friday May 1 in the same week.
+
+### Fixed
+- **Check-in / unlock date mismatch.** Check-in wrote `set_targets.valid_from = today + 1`, while unlock's cleanup deleted `WHERE valid_from = session.date + 1`. If the session's date had drifted from "today" (possible before 1.1.5), unlock would silently fail to remove the next-day targets and the user would see stale numbers. Both paths now anchor on `session.date + 1 day`, so they always match.
+
+---
+
 ## [1.1.5] - 2026-05-01
 
 ### Fixed

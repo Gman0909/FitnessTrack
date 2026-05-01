@@ -196,7 +196,7 @@ router.post('/:id/checkin', (req, res) => {
   const { pain, recovery, pump, intensity, pause_weight, muscle_group } = req.body;
   const sessionId = req.params.id;
 
-  const session = db.prepare('SELECT plan_id FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
+  const session = db.prepare('SELECT plan_id, date FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
   const planId = session.plan_id ?? null;
 
@@ -213,8 +213,13 @@ router.post('/:id/checkin', (req, res) => {
   const repRange       = mgSettings.rep_range      ?? 'standard';
   const aggressiveness = mgSettings.aggressiveness ?? 'moderate';
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Anchor next-day target validity on the session's actual workout date,
+  // not "tomorrow from now". This keeps check-in writes and unlock cleanup
+  // consistent (unlock deletes WHERE valid_from = session.date + 1 day),
+  // and is correct even if check-in happens days after the workout.
+  const sessionDateStr = session.date ?? todayStr();
+  const tomorrow = new Date(sessionDateStr + 'T00:00:00Z');
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   const loggedSets = db.prepare(`
