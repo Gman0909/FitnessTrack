@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.7] - 2026-05-01
+
+### Fixed
+- **Check-in modal firing for muscle groups whose sets are all skipped.** Finishing a workout (or manually skipping every set in a group) used to trigger the pain / recovery / pump / intensity modal for that group, even though there was nothing to give feedback on. The modal now only fires for groups with at least one real logged set, and the server's "session fully checked in" condition is correspondingly relaxed to ignore all-skipped groups, so sessions are still marked done after only the trained groups have been checked in.
+
+---
+
 ## [1.1.6] - 2026-05-01
 
 ### Changed

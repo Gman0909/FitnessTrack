@@ -953,6 +953,14 @@ export default function TodayPage() {
     return group.exercises.every(ex => ex.sets.every(s => doneSet.has(`${ex.exercise_id}-${s.set_num}`)));
   }
 
+  // Only fire check-in modals for groups with at least one real logged set.
+  // liveValues is kept current by SetRow's onValuesChange effect.
+  function groupHasLoggedSets(group) {
+    return group.exercises.some(ex =>
+      ex.sets.some(s => liveValues.current.get(`${ex.exercise_id}-${s.set_num}`)?.status === 'logged')
+    );
+  }
+
   // Week / Day label from the selected slot position
   const weekDayLabel = (() => {
     if (!selectedSlot || !calendarData?.weeks?.length) return null;
@@ -987,8 +995,29 @@ export default function TodayPage() {
 
   useEffect(() => {
     if (pendingCheckin !== null) return;
-    const next = groups.find(g => groupIsDone(g) && !checkedInGroups.has(g.muscle_group) && !dismissedGroups.has(g.muscle_group));
+    const next = groups.find(g =>
+      groupIsDone(g) &&
+      !checkedInGroups.has(g.muscle_group) &&
+      !dismissedGroups.has(g.muscle_group) &&
+      groupHasLoggedSets(g)
+    );
     if (next) setPending(next.muscle_group);
+
+    // Sweep all-skipped done groups into checkedInGroups so the existing
+    // allDone derived state settles without each one needing a server-side
+    // check-in row.
+    const skippedDone = groups.filter(g =>
+      groupIsDone(g) &&
+      !checkedInGroups.has(g.muscle_group) &&
+      !groupHasLoggedSets(g)
+    );
+    if (skippedDone.length > 0) {
+      setCheckedIn(prev => {
+        const n = new Set(prev);
+        for (const g of skippedDone) n.add(g.muscle_group);
+        return n;
+      });
+    }
   }, [doneSet, pendingCheckin, checkedInGroups, dismissedGroups]); // eslint-disable-line
 
   // ── Callbacks ─────────────────────────────────────────────────────────────────
@@ -1176,8 +1205,12 @@ export default function TodayPage() {
       }
     }
     if (toLog.length === 0 && toSkip.length === 0) {
-      // All sets already logged — re-trigger check-in for any unchecked groups (e.g. after unlock)
-      const needsCheckin = groups.some(g => groupIsDone(g) && !checkedInGroups.has(g.muscle_group));
+      // All sets already logged — re-trigger check-in for any unchecked groups
+      // that actually have logged (non-skipped) sets. All-skipped groups are
+      // swept into checkedInGroups by the auto-checkin effect itself.
+      const needsCheckin = groups.some(g =>
+        groupIsDone(g) && !checkedInGroups.has(g.muscle_group) && groupHasLoggedSets(g)
+      );
       if (needsCheckin) setDismissed(new Set());
       return;
     }

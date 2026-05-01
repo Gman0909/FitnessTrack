@@ -286,10 +286,14 @@ router.post('/:id/checkin', (req, res) => {
     })();
   }
 
+  // Only require a check-in row for groups that actually have a real (non-skipped)
+  // logged set. Groups whose sets are all skipped don't need a check-in — there
+  // was no exercise to give feedback on — so they shouldn't block the session
+  // from being marked checked_in = 1.
   const allGroups = db.prepare(`
     SELECT DISTINCT e.muscle_group FROM logged_sets ls
     JOIN exercises e ON e.id = ls.exercise_id
-    WHERE ls.session_id = ?
+    WHERE ls.session_id = ? AND ls.skipped = 0
   `).all(sessionId).map(r => r.muscle_group);
 
   const checkedGroups = db.prepare(
