@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.10] - 2026-05-02
+
+### Changed
+- **Top nav mobile usability.** The top-of-app strip (brand, nav tabs, user dropdown) had sub-44px tap targets, especially the user trigger. Workout / Plans / Stats links are now 44px tall, the user dropdown trigger is 44px, dropdown menu items are 48px, the dropdown is wider (140→180px), and the brand strip + barbell mark are slightly larger. No font, color, or border-radius changes.
+
+---
+
 ## [1.1.9] - 2026-05-02
 
 Mobile usability pass across every page. Same dark theme, same rounded-corner aesthetic — just bigger taps, less wrapping, and proper vertical rhythm in modals.

@@ -31,9 +31,13 @@ const linkStyle = ({ isActive }) => ({
   fontWeight: isActive ? '600' : 'normal',
   textDecoration: 'none',
   color: isActive ? 'var(--text)' : 'var(--muted)',
-  padding: '0.5rem 0.75rem',
+  padding: '0.85rem 1rem',
+  minHeight: '44px',
+  display: 'flex',
+  alignItems: 'center',
   borderBottom: isActive ? '2px solid var(--text)' : '2px solid transparent',
   whiteSpace: 'nowrap',
+  fontSize: '0.95rem',
 });
 
 // ── App shell ─────────────────────────────────────────────────────────────────
@@ -66,9 +70,10 @@ function AppShell() {
   }
 
   const menuItemStyle = {
-    display: 'block', width: '100%', padding: '0.6rem 1rem',
+    display: 'flex', alignItems: 'center', width: '100%',
+    padding: '0.85rem 1rem', minHeight: '48px',
     background: 'none', border: 'none', textAlign: 'left',
-    fontSize: '0.875rem', cursor: 'pointer', color: 'var(--text)',
+    fontSize: '0.95rem', cursor: 'pointer', color: 'var(--text)',
     textDecoration: 'none',
   };
 
@@ -76,13 +81,13 @@ function AppShell() {
     <UnitContext.Provider value={unitCtx}>
 
       {/* Brand header */}
-      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0.45rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <BarbellLogo size={20} />
-        <span style={{ fontWeight: '800', fontSize: '0.95rem', color: 'var(--text)', letterSpacing: '-0.01em' }}>FitnessTrack</span>
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+        <BarbellLogo size={22} />
+        <span style={{ fontWeight: '800', fontSize: '1rem', color: 'var(--text)', letterSpacing: '-0.01em' }}>FitnessTrack</span>
       </div>
 
       {/* Nav bar */}
-      <nav style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+      <nav style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
         <div style={{ display: 'flex', overflowX: 'auto', flex: 1 }}>
           <NavLink to="/"         end style={linkStyle}>Workout</NavLink>
           <NavLink to="/schedule"     style={linkStyle}>Plans</NavLink>
@@ -90,12 +95,18 @@ function AppShell() {
         </div>
 
         {/* User dropdown */}
-        <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <div ref={menuRef} style={{ position: 'relative', flexShrink: 0, display: 'flex' }}>
           <button
             onClick={() => setMenuOpen(o => !o)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '0.45rem 0.75rem', fontSize: '0.875rem' }}
+            aria-label="Account menu"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              background: 'none', border: 'none', color: 'var(--text)',
+              cursor: 'pointer', padding: '0.6rem 0.85rem', minHeight: '44px',
+              fontSize: '0.9rem',
+            }}
           >
-            <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>{user.glyph}</span>
+            <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{user.glyph}</span>
             <span style={{ fontWeight: '500', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</span>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, transition: 'transform 0.15s', transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)', color: 'var(--muted)' }}>
               <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
@@ -103,7 +114,13 @@ function AppShell() {
           </button>
 
           {menuOpen && (
-            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 2px)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden', zIndex: 50, minWidth: '140px', boxShadow: '0 6px 16px rgba(0,0,0,0.35)' }}>
+            <div style={{
+              position: 'absolute', right: 0, top: 'calc(100% + 2px)',
+              background: 'var(--surface2)', border: '1px solid var(--border)',
+              borderRadius: '8px', overflow: 'hidden',
+              zIndex: 50, minWidth: '180px',
+              boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
+            }}>
               <NavLink to="/profile" onClick={() => setMenuOpen(false)} style={{ ...menuItemStyle, borderBottom: '1px solid var(--border)' }}>Profile</NavLink>
               <NavLink to="/setup"   onClick={() => setMenuOpen(false)} style={{ ...menuItemStyle, borderBottom: '1px solid var(--border)' }}>Setup</NavLink>
               <button onClick={() => { handleLogout(); setMenuOpen(false); }} style={{ ...menuItemStyle, color: 'var(--danger)' }}>Log out</button>
