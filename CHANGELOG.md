@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0] - 2026-05-02
+
+### Changed
+- **Session-date semantics rewritten** to better match how a workout actually unfolds. The new rules:
+  - **Blank session** (no logged or skipped sets): `session.date` is `NULL`. The header displays *today's* date and re-evaluates on every page reload — useful when you open the app on a new day before logging anything.
+  - **First log/skip**: stamps `session.date = today`. Locked while in-progress.
+  - **All sets unlogged again**: `session.date` clears back to `NULL` and the displayed date resumes floating to today. Lets you "undo" before any real work has happened.
+  - **Finalized** (`checked_in = 1` or `unlocked = 1`): `session.date` is locked permanently. Subsequent unlocks, edits, re-logs do not move the date — the workout's real date stands.
+- All logged-set rows in a session continue to inherit their completion date from `session.date` for stats and history. With the new rules, edits to a finalized session never re-date its sets.
+
+### Fixed
+- Slot creation no longer pre-stamps `session.date = today` at the moment of navigation. Previously this caused stats to show stale dates for sessions opened in advance.
+
+### Migration
+- One-time, idempotent: clears `session.date` for all rows that are currently blank and never finalized. Sessions with logs or that have ever been finalized are untouched.
+
+---
+
 ## [1.1.10] - 2026-05-02
 
 ### Changed

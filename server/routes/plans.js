@@ -289,16 +289,22 @@ router.get('/:id/calendar', (req, res) => {
     ? (currentWeek - 1) * dayLen + workoutDays.indexOf(currentDow)
     : Infinity;
 
+  const today = new Date().toISOString().split('T')[0];
   const weeks = [];
   for (let w = 1; w <= weekCount; w++) {
     const days = [];
     for (const d of workoutDays) {
       const s      = getSlotSession.get(planId, w, d, userId);
       const reqIdx = (w - 1) * dayLen + workoutDays.indexOf(d);
+      const isCurrent = currentWeek === w && currentDow === d;
+      // Blank current slot has no stamped date yet — show today so the picker
+      // doesn't render an empty cell. Past blank slots stay null (they were
+      // never started). Locked-in dates pass through as-is.
+      const displayDate = s?.date ?? (isCurrent ? today : null);
       days.push({
         day_of_week:     d,
-        date:            s?.date ?? null,
-        is_current:      currentWeek === w && currentDow === d,
+        date:            displayDate,
+        is_current:      isCurrent,
         is_locked:       reqIdx > curIdx,
         scheduled_count: scheduledCounts[d],
         session:         s ? { id: s.id, checked_in: s.checked_in, exercise_count: s.exercise_count, logged_count: s.logged_count } : null,

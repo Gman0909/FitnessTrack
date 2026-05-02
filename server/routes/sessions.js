@@ -66,9 +66,13 @@ router.get('/slot', (req, res) => {
   let session = getSlotSession.get(planId, weekNum, sessionDow, userId);
 
   if (!session && !isLocked) {
+    // Create with date = NULL. The session's date is stamped only when the
+    // first live set is logged (POST /sets), and cleared again if the session
+    // becomes blank (DELETE /sets last live row). Once finalized (checked_in
+    // or unlocked), the date is locked permanently.
     const { lastInsertRowid } = db.prepare(
-      'INSERT INTO sessions (date, week_num, session_dow, plan_id, user_id) VALUES (?, ?, ?, ?, ?)'
-    ).run(todayStr(), weekNum, sessionDow, planId, userId);
+      'INSERT INTO sessions (date, week_num, session_dow, plan_id, user_id) VALUES (NULL, ?, ?, ?, ?)'
+    ).run(weekNum, sessionDow, planId, userId);
     session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(lastInsertRowid);
   }
 
@@ -124,6 +128,10 @@ router.post('/:id/skip', (req, res) => {
         for (let i = 1; i <= slot.set_count; i++)
           ins.run(sessionId, slot.exercise_id, i);
     }
+    // Stamp today's date if the session is blank (first activity = the skip
+    // itself). Don't overwrite an existing date — if the user already logged
+    // something earlier in the session, that earlier date stands.
+    db.prepare(`UPDATE sessions SET date = date('now') WHERE id = ? AND date IS NULL`).run(sessionId);
     db.prepare('UPDATE sessions SET checked_in = 1, unlocked = 0 WHERE id = ?').run(sessionId);
   })();
 
@@ -157,14 +165,21 @@ router.post('/:id/sets', (req, res) => {
     'INSERT INTO logged_sets (session_id, exercise_id, set_num, reps_done, skipped, weight_used) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(req.params.id, exercise_id, set_num, reps_done ?? null, skipped ? 1 : 0, weight_used ?? null);
 
-  // If this is the first live set logged into the session, stamp the session's
-  // date to today. Sessions are otherwise dated at creation time, which is when
-  // the user first navigated to the slot — that's not the workout's actual date.
+  // Date stamping rules:
+  //   - Blank session (no live logs): date is NULL, displayed as "today".
+  //   - First live log lands → stamp date = today. Locked while in-progress.
+  //   - All sets unlogged again → DELETE handler clears date back to NULL.
+  //   - Once finalized (checked_in=1 or unlocked=1), date is locked forever.
+  // The WHERE clause ensures we only stamp blank, never-finalized sessions —
+  // even if a later "first live log" event fires for some other reason.
   const liveCount = db.prepare(
     'SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
   ).get(req.params.id).n;
   if (liveCount === 1) {
-    db.prepare("UPDATE sessions SET date = date('now') WHERE id = ?").run(req.params.id);
+    db.prepare(`
+      UPDATE sessions SET date = date('now')
+      WHERE id = ? AND date IS NULL AND checked_in = 0 AND unlocked = 0
+    `).run(req.params.id);
   }
 
   res.status(201).json({ id: lastInsertRowid });
@@ -177,6 +192,19 @@ router.delete('/:id/sets/:exerciseId/:setNum', (req, res) => {
   db.prepare(
     'DELETE FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ?'
   ).run(req.params.id, req.params.exerciseId, req.params.setNum);
+
+  // If the session is now blank again (and never finalized), unlock its date
+  // so future visits show today's date until a new first-log re-stamps it.
+  const liveCount = db.prepare(
+    'SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
+  ).get(req.params.id).n;
+  if (liveCount === 0) {
+    db.prepare(`
+      UPDATE sessions SET date = NULL
+      WHERE id = ? AND checked_in = 0 AND unlocked = 0
+    `).run(req.params.id);
+  }
+
   res.json({ ok: true });
 });
 

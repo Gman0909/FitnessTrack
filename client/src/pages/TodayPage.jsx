@@ -1333,7 +1333,9 @@ export default function TodayPage() {
             {weekDayLabel?.dayNum ? `Day ${weekDayLabel.dayNum}` : (selectedSlot ? DAY_LABELS[selectedSlot.dow] : 'Today')}
           </h2>
           <div style={{ fontSize:'0.8rem', color:'var(--muted)', marginTop:'4px' }}>
-            {session?.date ? fmtDate(session.date) : selectedSlot ? DAY_LABELS[selectedSlot.dow] : ''}
+            {/* Blank session has session.date = null → show today. First log
+                stamps it; once finalized it's locked even after unlock. */}
+            {fmtDate(session?.date ?? new Date().toISOString().split('T')[0])}
             {activePlan && <span style={{ color:'var(--dim)' }}> · {activePlan.name}</span>}
             {isLocked && <span style={{ marginLeft:'0.5rem', fontSize:'0.72rem', color:'var(--dim)', letterSpacing:'0.05em' }}>· locked</span>}
           </div>

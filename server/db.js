@@ -227,6 +227,22 @@ if (!cols('session_checkins').includes('pause_weight'))
 if (!cols('sessions').includes('unlocked'))
   db.exec('ALTER TABLE sessions ADD COLUMN unlocked INTEGER NOT NULL DEFAULT 0');
 
+// Clear stale dates on currently-blank, never-finalized sessions. Earlier
+// versions stamped session.date at slot-creation time (when the user merely
+// navigated to the slot). The new rule is: blank sessions have NULL date and
+// display as "today" until a real first log stamps a value. This is
+// idempotent — re-runs only affect rows that are still in the blank state.
+db.prepare(`
+  UPDATE sessions SET date = NULL
+  WHERE date IS NOT NULL
+    AND checked_in = 0
+    AND unlocked = 0
+    AND id NOT IN (
+      SELECT DISTINCT session_id FROM logged_sets
+      WHERE skipped = 1 OR reps_done IS NOT NULL
+    )
+`).run();
+
 // ── Per-muscle-group training preferences ─────────────────────────────────────
 
 const tableNames = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map(r => r.name);
