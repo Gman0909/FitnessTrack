@@ -175,12 +175,12 @@ function DayPickerPanel({ calendarData, selectedSlot, onSelect, weekCount, onDec
       {/* Week count controls */}
       {weekCount != null && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', paddingBottom: '0.6rem', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)', flex: 1 }}>Plan length</span>
-          <button type="button" onClick={onDecreaseWeek}
-            style={{ width: '26px', height: '26px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-          <span style={{ minWidth: '54px', textAlign: 'center', fontSize: '0.82rem', color: 'var(--text)' }}>{weekCount} week{weekCount !== 1 ? 's' : ''}</span>
-          <button type="button" onClick={onIncreaseWeek}
-            style={{ width: '26px', height: '26px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+          <span style={{ fontSize: '0.85rem', color: 'var(--muted)', flex: 1 }}>Plan length</span>
+          <button type="button" onClick={onDecreaseWeek} aria-label="Decrease weeks"
+            style={{ width: '36px', height: '36px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+          <span style={{ minWidth: '60px', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text)' }}>{weekCount} week{weekCount !== 1 ? 's' : ''}</span>
+          <button type="button" onClick={onIncreaseWeek} aria-label="Increase weeks"
+            style={{ width: '36px', height: '36px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
         </div>
       )}
 
@@ -265,8 +265,21 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
     onCheckin(muscleGroup);
   }
 
-  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
-  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'500px', display:'flex', flexDirection:'column', gap:'1.25rem', border:'1px solid var(--border)' };
+  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200, padding:0 };
+  const box     = {
+    background:'var(--surface2)',
+    borderRadius:'16px 16px 0 0',
+    padding:'1.25rem 1rem',
+    paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
+    width:'100%',
+    maxWidth:'520px',
+    display:'flex',
+    flexDirection:'column',
+    gap:'1.1rem',
+    border:'1px solid var(--border)',
+    maxHeight: '92vh',
+    overflowY: 'auto',
+  };
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -274,35 +287,46 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
             <MuscleGroupBadge muscleGroup={muscleGroup} />
-            <span style={{ color:'var(--muted)', fontSize:'0.9rem' }}>Check-in</span>
+            <span style={{ color:'var(--muted)', fontSize:'0.95rem', fontWeight:500 }}>Check-in</span>
           </div>
-          <button type="button" onClick={onClose}
-            style={{ background:'none', border:'none', color:'var(--dim)', fontSize:'1.4rem', cursor:'pointer', lineHeight:1, padding:'0 4px' }}>✕</button>
+          <button type="button" onClick={onClose} aria-label="Close"
+            style={{ background:'none', border:'none', color:'var(--muted)', fontSize:'1.5rem', cursor:'pointer', lineHeight:1, width:'40px', height:'40px', display:'flex', alignItems:'center', justifyContent:'center', margin:'-8px' }}>✕</button>
         </div>
         {fields.map(({ key, label, options }) => (
-          <div key={key} style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-            <span style={{ width:'4.5rem', flexShrink:0, fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--dim)', fontWeight:'600' }}>{label}</span>
-            <div style={{ flex:1, display:'flex', gap:'0.35rem' }}>
+          <div key={key} style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+            <span style={{ fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', fontWeight:'600' }}>{label}</span>
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${options.length}, minmax(0, 1fr))`, gap:'0.4rem' }}>
               {options.map(({ v, l }) => (
                 <button key={v} type="button" onClick={() => setForm(f => ({ ...f, [key]: v }))}
-                  style={{ flex:1, padding:'0.45rem 0', border:`1px solid ${form[key]===v?'var(--btn)':'var(--border)'}`, borderRadius:'8px', fontSize:'0.85rem', background:form[key]===v?'var(--btn)':'var(--surface)', color:form[key]===v?'var(--btn-text)':'var(--muted)', fontWeight:form[key]===v?'600':'normal', cursor:'pointer', textAlign:'center' }}>
+                  style={{
+                    padding:'0.7rem 0.25rem',
+                    minHeight:'46px',
+                    border:`1px solid ${form[key]===v?'var(--btn)':'var(--border)'}`,
+                    borderRadius:'10px',
+                    fontSize:'0.85rem',
+                    lineHeight:1.15,
+                    background:form[key]===v?'var(--btn)':'var(--surface)',
+                    color:form[key]===v?'var(--btn-text)':'var(--text)',
+                    fontWeight:form[key]===v?'600':'500',
+                    cursor:'pointer',
+                    textAlign:'center',
+                    transition:'background 0.12s, color 0.12s, border-color 0.12s',
+                  }}>
                   {l}
                 </button>
               ))}
             </div>
           </div>
         ))}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <button type="button" onClick={handleSubmit} disabled={saving}
-            style={{ padding:'0.7rem 1.5rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor:'pointer' }}>
-            {saving ? 'Saving…' : 'Submit check-in'}
-          </button>
-          <label style={{ display:'flex', alignItems:'center', gap:'0.45rem', cursor:'pointer', userSelect:'none' }}>
-            <input type="checkbox" checked={pauseWeight} onChange={e => setPause(e.target.checked)}
-              style={{ width:'1rem', height:'1rem', accentColor:'var(--btn)', cursor:'pointer' }} />
-            <span style={{ fontSize:'0.8rem', color:'var(--muted)' }}>Pause weight increases</span>
-          </label>
-        </div>
+        <label style={{ display:'flex', alignItems:'center', gap:'0.6rem', cursor:'pointer', userSelect:'none', padding:'0.5rem 0' }}>
+          <input type="checkbox" checked={pauseWeight} onChange={e => setPause(e.target.checked)}
+            style={{ width:'1.15rem', height:'1.15rem', accentColor:'var(--btn)', cursor:'pointer', flexShrink:0 }} />
+          <span style={{ fontSize:'0.9rem', color:'var(--muted)' }}>Pause weight increases</span>
+        </label>
+        <button type="button" onClick={handleSubmit} disabled={saving}
+          style={{ width:'100%', padding:'0.95rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'1rem', cursor:'pointer', minHeight:'48px' }}>
+          {saving ? 'Saving…' : 'Submit check-in'}
+        </button>
       </div>
     </div>
   );
@@ -348,11 +372,11 @@ function SkipSessionModal({ onConfirm, onCancel }) {
         </div>
         <div style={{ display:'flex', gap:'0.5rem' }}>
           <button type="button" onClick={onCancel} disabled={busy}
-            style={{ flex:1, padding:'0.7rem', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer' }}>
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
             Cancel
           </button>
           <button type="button" onClick={handleConfirm} disabled={!confirmed || busy}
-            style={{ flex:1, padding:'0.7rem', background: confirmed ? 'var(--danger)' : 'var(--surface2)', color: confirmed ? '#fff' : 'var(--dim)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.9rem', cursor: confirmed && !busy ? 'pointer' : 'default', transition:'background 0.15s, color 0.15s' }}>
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background: confirmed ? 'var(--danger)' : 'var(--surface2)', color: confirmed ? '#fff' : 'var(--dim)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor: confirmed && !busy ? 'pointer' : 'default', transition:'background 0.15s, color 0.15s' }}>
             {busy ? 'Skipping…' : 'Skip session'}
           </button>
         </div>
@@ -405,11 +429,11 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
 
         <div style={{ display:'flex', gap:'0.5rem', marginTop:'0.25rem' }}>
           <button type="button" onClick={onCancel} disabled={confirming}
-            style={{ flex:1, padding:'0.7rem', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer' }}>
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
             Cancel
           </button>
           <button type="button" onClick={handleConfirm} disabled={confirming}
-            style={{ flex:1, padding:'0.7rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.9rem', cursor: confirming ? 'default' : 'pointer' }}>
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor: confirming ? 'default' : 'pointer' }}>
             {confirming ? 'Logging…' : 'Confirm'}
           </button>
         </div>

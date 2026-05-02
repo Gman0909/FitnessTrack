@@ -40,28 +40,28 @@ function NewPlanModal({ onCreated, onClose }) {
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleCreate()}
-          style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)', fontSize: '1rem' }}
+          style={{ padding: '0.7rem 0.85rem', minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px' }}
         />
 
         <div>
           <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>Workout days</p>
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.4rem' }}>
             {DAY_LABELS.map((label, i) => (
               <button key={i} onClick={() => toggleDay(i)}
-                style={{ padding: '0.35rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: days.includes(i) ? 'var(--btn)' : 'var(--surface)', color: days.includes(i) ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.85rem', fontWeight: days.includes(i) ? '600' : 'normal' }}>
+                style={{ padding: '0.6rem 0', minHeight: '44px', border: '1px solid var(--border)', borderRadius: '8px', background: days.includes(i) ? 'var(--btn)' : 'var(--surface)', color: days.includes(i) ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.85rem', fontWeight: days.includes(i) ? '600' : '500', cursor: 'pointer' }}>
                 {label}
               </button>
             ))}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button onClick={onClose}
-            style={{ padding: '0.5rem 1rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'none', color: 'var(--muted)' }}>
+            style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--text)', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer' }}>
             Cancel
           </button>
           <button onClick={handleCreate} disabled={saving || !name.trim()}
-            style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: '6px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '600', opacity: !name.trim() ? 0.4 : 1 }}>
+            style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '700', fontSize: '0.95rem', opacity: !name.trim() ? 0.4 : 1, cursor: 'pointer' }}>
             {saving ? 'Creating…' : 'Create'}
           </button>
         </div>
@@ -89,16 +89,16 @@ function CloneModal({ plan, onCloned, onClose }) {
   }
 
   const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'1rem' };
-  const box     = { background:'var(--surface2)', borderRadius:'12px', padding:'1.5rem', width:'100%', maxWidth:'420px', display:'flex', flexDirection:'column', gap:'1rem' };
-  const optBtn  = (active) => ({ width:'100%', padding:'0.55rem 0.85rem', textAlign:'left', border:`1px solid ${active ? 'var(--btn)' : 'var(--border)'}`, borderRadius:'8px', background: active ? 'var(--btn)' : 'var(--surface)', color: active ? 'var(--btn-text)' : 'var(--muted)', fontSize:'0.875rem', fontWeight: active ? '600' : 'normal', cursor:'pointer' });
+  const box     = { background:'var(--surface2)', borderRadius:'12px', padding:'1.25rem', width:'100%', maxWidth:'420px', display:'flex', flexDirection:'column', gap:'1rem' };
+  const optBtn  = (active) => ({ width:'100%', padding:'0.85rem 1rem', minHeight:'52px', textAlign:'left', border:`1px solid ${active ? 'var(--btn)' : 'var(--border)'}`, borderRadius:'8px', background: active ? 'var(--btn)' : 'var(--surface)', color: active ? 'var(--btn-text)' : 'var(--text)', fontSize:'0.9rem', fontWeight: active ? '600' : '500', cursor:'pointer' });
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={box}>
-        <h3 style={{ margin:0, color:'var(--text)', fontSize:'1rem', fontWeight:'700' }}>Clone "{plan.name}"</h3>
+        <h3 style={{ margin:0, color:'var(--text)', fontSize:'1.05rem', fontWeight:'700' }}>Clone "{plan.name}"</h3>
 
         <div>
-          <p style={{ margin:'0 0 0.5rem', fontSize:'0.8rem', color:'var(--muted)' }}>Pick up weights from</p>
+          <p style={{ margin:'0 0 0.5rem', fontSize:'0.85rem', color:'var(--muted)' }}>Pick up weights from</p>
           <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem' }}>
             <button onClick={() => setSeedWeek(null)} style={optBtn(seedWeek === null)}>
               Original starting weights
@@ -106,21 +106,21 @@ function CloneModal({ plan, onCloned, onClose }) {
             {!calendar && <p style={{ margin:0, fontSize:'0.8rem', color:'var(--dim)' }}>Loading weeks…</p>}
             {completedWeeks.map(w => (
               <button key={w.week_num} onClick={() => setSeedWeek(w.week_num)} style={optBtn(seedWeek === w.week_num)}>
-                Week {w.week_num}{w.start_date && w.end_date ? <span style={{ opacity:0.65, fontWeight:'normal' }}> · {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span> : ''}
+                Week {w.week_num}{w.start_date && w.end_date ? <span style={{ opacity:0.7, fontWeight:'normal' }}> · {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span> : ''}
               </button>
             ))}
             {calendar && completedWeeks.length === 0 && (
-              <p style={{ margin:0, fontSize:'0.8rem', color:'var(--dim)' }}>No completed weeks to seed from.</p>
+              <p style={{ margin:0, fontSize:'0.85rem', color:'var(--dim)' }}>No completed weeks to seed from.</p>
             )}
           </div>
         </div>
 
-        <div style={{ display:'flex', gap:'0.5rem', justifyContent:'flex-end' }}>
-          <button onClick={onClose} style={{ padding:'0.5rem 1rem', border:'1px solid var(--border)', borderRadius:'6px', background:'none', color:'var(--muted)' }}>
+        <div style={{ display:'flex', gap:'0.5rem' }}>
+          <button onClick={onClose} style={{ flex:1, padding:'0.85rem', minHeight:'48px', border:'1px solid var(--border)', borderRadius:'8px', background:'none', color:'var(--text)', fontSize:'0.95rem', fontWeight:'500', cursor:'pointer' }}>
             Cancel
           </button>
           <button onClick={handleClone} disabled={cloning}
-            style={{ padding:'0.5rem 1.25rem', border:'none', borderRadius:'6px', background:'var(--btn)', color:'var(--btn-text)', fontWeight:'600' }}>
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', border:'none', borderRadius:'8px', background:'var(--btn)', color:'var(--btn-text)', fontWeight:'700', fontSize:'0.95rem', cursor:'pointer' }}>
             {cloning ? 'Cloning…' : 'Clone'}
           </button>
         </div>
@@ -149,16 +149,16 @@ function ConfirmDeleteModal({ plan, onConfirm, onClose }) {
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={box}>
         <h3 style={{ margin: 0, color: 'var(--text)' }}>Delete plan?</h3>
-        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem' }}>
+        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
           "<strong style={{ color: 'var(--text)' }}>{plan.name}</strong>" and all its targets will be permanently deleted.
         </p>
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button onClick={onClose} disabled={deleting}
-            style={{ padding: '0.5rem 1rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'none', color: 'var(--muted)' }}>
+            style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--text)', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer' }}>
             Cancel
           </button>
           <button onClick={handleConfirm} disabled={deleting}
-            style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: '6px', background: 'var(--danger)', color: '#fff', fontWeight: '600', opacity: deleting ? 0.6 : 1 }}>
+            style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: 'var(--danger)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', opacity: deleting ? 0.6 : 1, cursor: 'pointer' }}>
             {deleting ? 'Deleting…' : 'Delete'}
           </button>
         </div>
@@ -217,20 +217,20 @@ function PlanCard({ plan, onActivate, onClone, onDelete, onClick }) {
       <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>
         {plan.is_active !== 1 && (
           <button onClick={() => wrap(onActivate)} disabled={busy}
-            style={{ flex: 1, padding: '0.55rem', background: 'none', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--success)', fontSize: '0.85rem', fontWeight: '500' }}>
+            style={{ flex: 1, padding: '0.85rem 0.5rem', minHeight: '46px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--success)', fontSize: '0.88rem', fontWeight: '600', cursor: 'pointer' }}>
             Activate
           </button>
         )}
         <button onClick={onClick}
-          style={{ flex: 1, padding: '0.55rem', background: 'none', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--muted)', fontSize: '0.85rem' }}>
+          style={{ flex: 1, padding: '0.85rem 0.5rem', minHeight: '46px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--text)', fontSize: '0.88rem', fontWeight: '500', cursor: 'pointer' }}>
           Edit
         </button>
         <button onClick={() => wrap(onClone)} disabled={busy}
-          style={{ flex: 1, padding: '0.55rem', background: 'none', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--muted)', fontSize: '0.85rem' }}>
+          style={{ flex: 1, padding: '0.85rem 0.5rem', minHeight: '46px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--text)', fontSize: '0.88rem', fontWeight: '500', cursor: 'pointer' }}>
           Clone
         </button>
         <button onClick={onDelete} disabled={busy}
-          style={{ flex: 1, padding: '0.55rem', background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.85rem' }}>
+          style={{ flex: 1, padding: '0.85rem 0.5rem', minHeight: '46px', background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.88rem', fontWeight: '500', cursor: 'pointer' }}>
           Delete
         </button>
       </div>
@@ -276,7 +276,7 @@ export default function PlansPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
         <h2 style={{ margin: 0, color: 'var(--text)' }}>Workout Plans</h2>
         <button onClick={() => setModal(true)}
-          style={{ padding: '0.4rem 0.9rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '6px', fontWeight: '600' }}>
+          style={{ padding: '0.55rem 1rem', minHeight: '40px', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}>
           + New
         </button>
       </div>

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.9] - 2026-05-02
+
+Mobile usability pass across every page. Same dark theme, same rounded-corner aesthetic — just bigger taps, less wrapping, and proper vertical rhythm in modals.
+
+### Changed
+- **Check-in modal** is now a bottom sheet. Each field's label stacks above its options instead of fighting them for horizontal room — `Never sore` / `Still sore` / `Healed` no longer wrap. All option buttons 46px+ tall. `Pause weight increases` checkbox on its own row. Submit button is now full-width 48px (used to wrap to two lines).
+- **Add Exercise modal**: bigger close ✕ (40×40), exercise list rows 52px+ with overflow-elided name and color-coded muscle tag, sets buttons in a 5-col grid at 46px, reps in 4-col at 46px, wider 120px starting-weight input, 48px full-width Add button. Custom-exercise creation chips also bigger.
+- **Plan day-card slot rows** went from 36px to 52px with the exercise name on its own line, sub-row containing colored muscle tag + set/weight info, and a dedicated 40×40 delete ✕ tap area. `+ Add` 28→36px. Workout-day toggle (Mon/Tue/Wed…) is now a 7-col grid of 44px chips instead of variable-width chips that wrapped to a second row.
+- **Plans list**: `+ New` 28→40px. Per-card action row (Edit / Clone / Delete / Activate) 32→46px. All Cancel/Create/Clone/Delete modal buttons full-width 48px. Clone modal week options 52px tall. New-plan day picker is a 7-col 44px grid.
+- **Stats page**: `All time` / `This plan` and `Volume` / `Max weight` toggles 24→38px. Exercise selector 30→46px with 16px font. Export rows show description with proper line-height; the `Download CSV` button shrank to a tidy 40px `CSV` chip. `Reset training data…` 28→44px. Reset modal: 48px buttons, 46px input, larger close ✕.
+- **Auth page**: tab buttons 36→48px, submit 38→48px, fields 32→46px with 16px font. Glyph picker: 8 cramped columns of 32px buttons → 6 columns of square aspect-ratio buttons at 44px+.
+- **Profile page**: same field/glyph/save treatment as Auth.
+- **Setup page**: equipment toggle rows 36→52px with bigger checkboxes. `kg`/`lbs` 32→44px. Training preferences row, the worst offender (label + 3 + 3 squashed buttons all ~24px on one line), restructured into per-muscle-group cards with `REP RANGE` and `PROGRESSION` as separate labelled rows of 3-col 40px buttons. Custom-exercise rows 36→52px with stacked name+meta, color-coded muscle tag, dedicated 40×40 ✕ delete area, bigger Edit chip. Update / Reload / Dismiss buttons all 40+px. Edit-exercise modal restyled to match the new chip standards.
+- **Today page**: skip-session and finish-confirm modal buttons full-width 48px. Day-picker plan-length `+`/`−` controls 26→36px square.
+
+---
+
 ## [1.1.8] - 2026-05-01
 
 Major robustness pass on the workout-session lifecycle. Per-set state is now lifted into a single parent-managed Map (`setStatuses`) instead of being scattered across SetRow's local state, the `liveValues` ref, `doneSet`, and `initials`. SetRow is now a controlled component. Multiple stale-state-after-reload bugs are gone as a result.

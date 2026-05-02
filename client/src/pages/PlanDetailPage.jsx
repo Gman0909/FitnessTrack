@@ -110,52 +110,64 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
     }
   }
 
-  const inputStyle = { padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px' };
+  const inputStyle = { padding: '0.7rem 0.8rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px', minHeight: '46px' };
+  const chipStyle  = (active) => ({
+    padding: '0.55rem 0.85rem',
+    minHeight: '40px',
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+    background: active ? 'var(--btn)' : 'var(--surface)',
+    color: active ? 'var(--btn-text)' : 'var(--text)',
+    fontSize: '0.88rem',
+    fontWeight: active ? '600' : '500',
+    textTransform: 'capitalize',
+    cursor: 'pointer',
+  });
   const overlay    = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 };
-  const sheet      = { background: 'var(--surface2)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '640px', padding: '1.25rem', paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' };
+  const sheet      = { background: 'var(--surface2)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '640px', padding: '1.25rem 1rem', paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: '0.85rem', overflowY: 'auto' };
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={sheet}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong style={{ color: 'var(--text)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+          <strong style={{ color: 'var(--text)', fontSize: '1rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {creating ? 'New custom exercise' : selected ? selected.name : `Add to ${DAY_LABELS[dayIndex]}`}
           </strong>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.25rem', color: 'var(--muted)' }}>✕</button>
+          <button onClick={onClose} aria-label="Close"
+            style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: 'var(--muted)', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: '-8px' }}>✕</button>
         </div>
 
         {creating ? (
           <>
-            <button onClick={() => setCreating(false)} style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: 0, textAlign: 'left', fontSize: '0.875rem' }}>← Back to search</button>
+            <button onClick={() => setCreating(false)}
+              style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: '0.4rem 0', textAlign: 'left', fontSize: '0.9rem', cursor: 'pointer', alignSelf: 'flex-start' }}>← Back to search</button>
             <input autoFocus placeholder="Exercise name" value={newName} onChange={e => setNewName(e.target.value)} style={inputStyle} />
             <div>
-              <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Muscle group</p>
-              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Muscle group</p>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 {MUSCLE_GROUPS.map(mg => (
-                  <button key={mg} onClick={() => setNewMuscle(mg)}
-                    style={{ padding: '0.35rem 0.65rem', border: '1px solid var(--border)', borderRadius: '6px', background: newMuscle === mg ? 'var(--btn)' : 'var(--surface)', color: newMuscle === mg ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.85rem', textTransform: 'capitalize' }}>
+                  <button key={mg} onClick={() => setNewMuscle(mg)} style={chipStyle(newMuscle === mg)}>
                     {mg}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Equipment</p>
-              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Equipment</p>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 {ALL_EQUIPMENT.map(eq => (
-                  <button key={eq} onClick={() => setNewEquip(eq)}
-                    style={{ padding: '0.35rem 0.65rem', border: '1px solid var(--border)', borderRadius: '6px', background: newEquip === eq ? 'var(--btn)' : 'var(--surface)', color: newEquip === eq ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.85rem', textTransform: 'capitalize' }}>
+                  <button key={eq} onClick={() => setNewEquip(eq)} style={chipStyle(newEquip === eq)}>
                     {eq}
                   </button>
                 ))}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <label style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Weight increment (kg)</label>
-              <input type="number" min="0" step="0.5" value={newIncr} onChange={e => setNewIncr(e.target.value)} style={{ ...inputStyle, width: '70px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>Weight increment (kg)</label>
+              <input type="number" min="0" step="0.5" value={newIncr} onChange={e => setNewIncr(e.target.value)} style={{ ...inputStyle, width: '90px' }} />
             </div>
             <button onClick={handleCreateExercise} disabled={saving || !newName.trim() || !newMuscle || !newEquip}
-              style={{ padding: '0.65rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', opacity: !newName.trim() || !newMuscle || !newEquip ? 0.4 : 1 }}>
+              style={{ padding: '0.95rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', opacity: !newName.trim() || !newMuscle || !newEquip ? 0.4 : 1, cursor: 'pointer', minHeight: '48px' }}>
               {saving ? 'Creating…' : 'Create exercise'}
             </button>
           </>
@@ -172,21 +184,21 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
                 {equipmentTypes.map(t => <option key={t} value={t} style={{ textTransform: 'capitalize' }}>{t}</option>)}
               </select>
             </div>
-            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {filtered.map(ex => (
                 <button key={ex.id} onClick={() => setSelected(ex)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', color: 'var(--text)', textAlign: 'left' }}>
-                  <span style={{ fontWeight: '500' }}>{ex.name}</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{ex.muscle_group}</span>
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 0.9rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', color: 'var(--text)', textAlign: 'left', minHeight: '52px', cursor: 'pointer' }}>
+                  <span style={{ fontWeight: '500', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
+                  <span style={{ fontSize: '0.72rem', color: `var(--mc-${ex.muscle_group}, var(--dim))`, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>{ex.muscle_group}</span>
                 </button>
               ))}
               {filtered.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '0.875rem', margin: '0 0 0.75rem' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '0.9rem', margin: '0 0 0.85rem' }}>
                     {search.trim() ? `No results for "${search}"` : 'No exercises. Add equipment in Setup first.'}
                   </p>
                   <button onClick={() => { setNewName(search.trim()); setCreating(true); }}
-                    style={{ padding: '0.5rem 1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', color: 'var(--text)', fontWeight: '500' }}>
+                    style={{ padding: '0.7rem 1.1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)', color: 'var(--text)', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', minHeight: '44px' }}>
                     + Create custom exercise
                   </button>
                 </div>
@@ -195,39 +207,42 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
           </>
         ) : (
           <>
-            <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: 0, textAlign: 'left', fontSize: '0.875rem' }}>← {selected.name}</button>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            <button onClick={() => setSelected(null)}
+              style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: '0.4rem 0', textAlign: 'left', fontSize: '0.9rem', cursor: 'pointer', alignSelf: 'flex-start' }}>← Back to search</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Sets</label>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '0.4rem' }}>
                   {[1,2,3,4,5].map(n => (
-                    <button key={n} onClick={() => setSetCount(n)} style={{ flex: 1, height: '2.25rem', border: '1px solid var(--border)', borderRadius: '6px', background: setCount === n ? 'var(--btn)' : 'var(--surface)', color: setCount === n ? 'var(--btn-text)' : 'var(--text)' }}>{n}</button>
+                    <button key={n} onClick={() => setSetCount(n)}
+                      style={{ minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: setCount === n ? 'var(--btn)' : 'var(--surface)', color: setCount === n ? 'var(--btn-text)' : 'var(--text)', fontWeight: setCount === n ? '600' : '500', fontSize: '1rem', cursor: 'pointer' }}>{n}</button>
                   ))}
                 </div>
               </div>
               {!isBodyweight && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Starting weight <span style={{ fontSize: '0.78rem', color: 'var(--dim)' }}>(optional)</span></label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <input type="text" inputMode="decimal" value={startWeight} onChange={e => setStartWeight(e.target.value)} placeholder=""
-                      style={{ ...inputStyle, width: '90px', borderColor: !weightValid ? 'var(--danger)' : 'var(--border)' }} />
-                    <span style={{ fontSize: '0.875rem', color: 'var(--dim)' }}>{unit}</span>
+                      style={{ ...inputStyle, width: '120px', borderColor: !weightValid ? 'var(--danger)' : 'var(--border)' }} />
+                    <span style={{ fontSize: '0.95rem', color: 'var(--muted)' }}>{unit}</span>
                   </div>
                 </div>
               )}
               {!isBodyweight && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Starting reps</label>
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.4rem' }}>
                     {[6,8,10,12].map(n => (
-                      <button key={n} onClick={() => setStartReps(n)} style={{ flex: 1, height: '2.25rem', border: '1px solid var(--border)', borderRadius: '6px', background: startReps === n ? 'var(--btn)' : 'var(--surface)', color: startReps === n ? 'var(--btn-text)' : 'var(--text)', fontSize: '0.85rem' }}>{n}</button>
+                      <button key={n} onClick={() => setStartReps(n)}
+                        style={{ minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: startReps === n ? 'var(--btn)' : 'var(--surface)', color: startReps === n ? 'var(--btn-text)' : 'var(--text)', fontWeight: startReps === n ? '600' : '500', fontSize: '0.95rem', cursor: 'pointer' }}>{n}</button>
                     ))}
                   </div>
                 </div>
               )}
             </div>
             <button onClick={handleAdd} disabled={saving || (!isBodyweight && !weightValid)}
-              style={{ marginTop: '0.25rem', padding: '0.65rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', opacity: saving || (!isBodyweight && !weightValid) ? 0.4 : 1 }}>
+              style={{ marginTop: '0.25rem', padding: '0.95rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', opacity: saving || (!isBodyweight && !weightValid) ? 0.4 : 1, cursor: 'pointer', minHeight: '48px' }}>
               {saving ? 'Adding…' : `Add ${setCount} set${setCount !== 1 ? 's' : ''}`}
             </button>
           </>
@@ -290,9 +305,12 @@ function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
 
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: '8px', marginBottom: '0.75rem', background: 'var(--surface)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1rem', borderBottom: sorted.length ? '1px solid var(--border)' : 'none' }}>
-        <strong style={{ fontSize: '0.9rem', color: 'var(--text)' }}>{day}</strong>
-        <button onClick={() => onAddClick(dayIndex)} style={{ padding: '0.3rem 0.7rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '500' }}>+ Add</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1rem', borderBottom: sorted.length ? '1px solid var(--border)' : 'none' }}>
+        <strong style={{ fontSize: '0.95rem', color: 'var(--text)' }}>{day}</strong>
+        <button onClick={() => onAddClick(dayIndex)}
+          style={{ padding: '0.5rem 0.9rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', minHeight: '36px', cursor: 'pointer' }}>
+          + Add
+        </button>
       </div>
       {sorted.map((slot, idx) => (
         <div
@@ -302,15 +320,45 @@ function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
           onDragOver={e => handleDragOver(e, slot.id)}
           onDrop={e => handleDrop(e, slot.id)}
           onDragEnd={handleDragEnd}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 1rem', borderBottom: idx < sorted.length - 1 ? '1px solid var(--border)' : 'none', background: dragOver === slot.id ? 'var(--surface2)' : 'transparent', borderTop: dragOver === slot.id ? '2px solid var(--muted)' : undefined, transition: 'background 0.1s' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.7rem 0.85rem 0.7rem 0.6rem', borderBottom: idx < sorted.length - 1 ? '1px solid var(--border)' : 'none', background: dragOver === slot.id ? 'var(--surface2)' : 'transparent', borderTop: dragOver === slot.id ? '2px solid var(--muted)' : undefined, transition: 'background 0.1s', minHeight: '52px' }}
         >
-          <span style={{ cursor: 'grab', color: 'var(--dim)', fontSize: '0.9rem', userSelect: 'none', letterSpacing: '-1px', flexShrink: 0 }}>⠿</span>
-          <div style={{ flex: 1 }}>
-            <span style={{ fontWeight: '500', fontSize: '0.875rem', color: 'var(--text)' }}>{slot.name}</span>
-            <span style={{ marginLeft: '0.4rem', fontSize: '0.72rem', color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{slot.muscle_group}</span>
+          <span style={{
+            cursor: 'grab',
+            color: 'var(--dim)',
+            fontSize: '1rem',
+            userSelect: 'none',
+            letterSpacing: '-1px',
+            flexShrink: 0,
+            width: '24px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            touchAction: 'none',
+          }}>⠿</span>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontWeight: '500', fontSize: '0.95rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.name}</span>
+            <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.72rem', color: 'var(--dim)' }}>
+              <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: `var(--mc-${slot.muscle_group}, var(--muted))` }}>{slot.muscle_group}</span>
+              <span style={{ color: 'var(--dim)' }}>·</span>
+              <span style={{ color: 'var(--muted)' }}>{slot.set_count} set{slot.set_count !== 1 ? 's' : ''}{slot.weight != null ? ` · ${display(slot.weight)}` : ''}</span>
+            </span>
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{slot.set_count} sets · {slot.weight != null ? display(slot.weight) : '—'}</span>
-          <button onClick={() => handleDelete(slot.id)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: '1rem', padding: '0 4px', cursor: 'pointer' }}>✕</button>
+          <button onClick={() => handleDelete(slot.id)} aria-label="Remove exercise"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--dim)',
+              fontSize: '1.1rem',
+              cursor: 'pointer',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              borderRadius: '6px',
+            }}>✕</button>
         </div>
       ))}
     </div>
@@ -335,10 +383,20 @@ function ConfigureTab({ plan, slots, onRefresh }) {
     <div>
       <div style={{ marginBottom: '1.5rem' }}>
         <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--dim)', margin: '0 0 0.6rem' }}>Workout days</p>
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.4rem' }}>
           {DAY_SHORT.map((label, i) => (
             <button key={i} onClick={() => toggleDay(i)}
-              style={{ padding: '0.4rem 0.7rem', border: '1px solid var(--border)', borderRadius: '6px', background: days.includes(i) ? 'var(--btn)' : 'var(--surface)', color: days.includes(i) ? 'var(--btn-text)' : 'var(--muted)', fontWeight: days.includes(i) ? '600' : 'normal', fontSize: '0.875rem' }}>
+              style={{
+                padding: '0.6rem 0',
+                minHeight: '44px',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                background: days.includes(i) ? 'var(--btn)' : 'var(--surface)',
+                color: days.includes(i) ? 'var(--btn-text)' : 'var(--muted)',
+                fontWeight: days.includes(i) ? '600' : '500',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+              }}>
               {label}
             </button>
           ))}

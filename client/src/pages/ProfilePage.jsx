@@ -9,8 +9,9 @@ const GLYPHS = [
 ];
 
 const field = {
-  padding: '0.5rem 0.7rem', border: '1px solid var(--border)', borderRadius: '8px',
-  background: 'var(--input-bg)', color: 'var(--text)', fontSize: '0.95rem',
+  padding: '0.75rem 0.85rem', minHeight: '46px',
+  border: '1px solid var(--border)', borderRadius: '8px',
+  background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px',
   width: '100%', boxSizing: 'border-box',
 };
 const label = {
@@ -70,12 +71,15 @@ export default function ProfilePage() {
         {/* Avatar */}
         <div>
           <span style={label}>Avatar</span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
             {GLYPHS.map(g => (
               <button key={g} type="button" onClick={() => setGlyph(g)} style={{
-                padding: '6px', border: `2px solid ${glyph === g ? 'var(--text)' : 'var(--border)'}`,
+                aspectRatio: '1 / 1',
+                minHeight: '44px',
+                border: `2px solid ${glyph === g ? 'var(--text)' : 'var(--border)'}`,
                 borderRadius: '8px', background: glyph === g ? 'var(--surface3)' : 'var(--surface2)',
-                fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1,
+                fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'border-color 0.1s, background 0.1s',
               }}>{g}</button>
             ))}
@@ -114,7 +118,8 @@ export default function ProfilePage() {
         )}
 
         <button type="submit" disabled={saving} style={{
-          padding: '0.7rem', background: 'var(--btn)', color: 'var(--btn-text)',
+          padding: '0.95rem', minHeight: '48px',
+          background: 'var(--btn)', color: 'var(--btn-text)',
           border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '1rem',
           cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1,
         }}>

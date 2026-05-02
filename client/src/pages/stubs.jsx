@@ -21,40 +21,49 @@ function EditExerciseModal({ exercise, onSave, onClose }) {
   }
 
   const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' };
-  const box     = { background: 'var(--surface2)', borderRadius: '12px', padding: '1.5rem', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1rem' };
-  const inp     = { padding: '0.45rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)', width: '100%' };
+  const box     = { background: 'var(--surface2)', borderRadius: '12px', padding: '1.25rem', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '90vh', overflowY: 'auto' };
+  const inp     = { padding: '0.7rem 0.85rem', minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px', width: '100%' };
+  const chip    = (active) => ({
+    padding: '0.55rem 0.85rem', minHeight: '40px',
+    border: '1px solid var(--border)', borderRadius: '8px',
+    background: active ? 'var(--btn)' : 'var(--surface)',
+    color: active ? 'var(--btn-text)' : 'var(--text)',
+    fontSize: '0.88rem', fontWeight: active ? '600' : '500',
+    textTransform: 'capitalize', cursor: 'pointer',
+  });
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={box}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <strong style={{ color: 'var(--text)' }}>Edit exercise</strong>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: '1.2rem' }}>✕</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <strong style={{ color: 'var(--text)', fontSize: '1rem' }}>Edit exercise</strong>
+          <button onClick={onClose} aria-label="Close"
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.5rem', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '-8px' }}>✕</button>
         </div>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Name" style={inp} />
         <div>
-          <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Muscle group</p>
-          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+          <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Muscle group</p>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
             {MUSCLE_GROUPS.map(m => (
-              <button key={m} onClick={() => setMg(m)} style={{ padding: '0.3rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: mg === m ? 'var(--btn)' : 'var(--surface)', color: mg === m ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.82rem', textTransform: 'capitalize' }}>{m}</button>
+              <button key={m} onClick={() => setMg(m)} style={chip(mg === m)}>{m}</button>
             ))}
           </div>
         </div>
         <div>
-          <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Equipment</p>
-          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+          <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)' }}>Equipment</p>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
             {ALL_EQUIPMENT.map(e => (
-              <button key={e} onClick={() => setEquip(e)} style={{ padding: '0.3rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', background: equip === e ? 'var(--btn)' : 'var(--surface)', color: equip === e ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.82rem', textTransform: 'capitalize' }}>{e}</button>
+              <button key={e} onClick={() => setEquip(e)} style={chip(equip === e)}>{e}</button>
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <label style={{ fontSize: '0.875rem', color: 'var(--muted)' }}>Increment (kg)</label>
-          <input type="number" min="0" step="0.5" value={incr} onChange={e => setIncr(e.target.value)} style={{ ...inp, width: '70px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>Increment (kg)</label>
+          <input type="number" min="0" step="0.5" value={incr} onChange={e => setIncr(e.target.value)} style={{ ...inp, width: '90px' }} />
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '0.45rem 1rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'none', color: 'var(--muted)' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving || !name.trim()} style={{ padding: '0.45rem 1.25rem', border: 'none', borderRadius: '6px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '600', opacity: !name.trim() ? 0.4 : 1 }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--text)', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !name.trim()} style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '700', fontSize: '0.95rem', opacity: !name.trim() ? 0.4 : 1, cursor: 'pointer' }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -191,15 +200,15 @@ export function SetupPage() {
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {ALL_EQUIPMENT.map(eq => (
-            <label key={eq} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.6rem 0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: saved.has(eq) ? 'var(--checked-bg)' : 'var(--surface)' }}>
+            <label key={eq} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.85rem', minHeight: '52px', border: '1px solid var(--border)', borderRadius: '10px', background: saved.has(eq) ? 'var(--checked-bg)' : 'var(--surface)' }}>
               <input
                 type="checkbox"
                 checked={saved.has(eq)}
                 onChange={() => handleToggle(eq)}
-                style={{ width: '1rem', height: '1rem', accentColor: 'var(--success)' }}
+                style={{ width: '1.15rem', height: '1.15rem', accentColor: 'var(--success)', flexShrink: 0 }}
               />
-              <span style={{ textTransform: 'capitalize', fontWeight: saved.has(eq) ? '500' : 'normal', color: 'var(--text)' }}>{eq}</span>
-              {saved.has(eq) && <span style={{ marginLeft: 'auto', color: 'var(--success)', fontSize: '0.8rem' }}>✓</span>}
+              <span style={{ textTransform: 'capitalize', fontWeight: saved.has(eq) ? '600' : '500', fontSize: '0.95rem', color: 'var(--text)' }}>{eq}</span>
+              {saved.has(eq) && <span style={{ marginLeft: 'auto', color: 'var(--success)', fontSize: '0.95rem' }}>✓</span>}
             </label>
           ))}
         </div>
@@ -210,7 +219,7 @@ export function SetupPage() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {['kg', 'lbs'].map(u => (
             <button key={u} onClick={() => unit !== u && toggle()}
-              style={{ padding: '0.5rem 1.25rem', border: '1px solid var(--border)', borderRadius: '6px', background: unit === u ? 'var(--btn)' : 'var(--surface)', color: unit === u ? 'var(--btn-text)' : 'var(--text)', fontWeight: unit === u ? '600' : 'normal' }}>
+              style={{ padding: '0.7rem 1.5rem', minHeight: '44px', border: '1px solid var(--border)', borderRadius: '8px', background: unit === u ? 'var(--btn)' : 'var(--surface)', color: unit === u ? 'var(--btn-text)' : 'var(--text)', fontSize: '0.95rem', fontWeight: unit === u ? '600' : '500', cursor: 'pointer' }}>
               {u}
             </button>
           ))}
@@ -222,30 +231,40 @@ export function SetupPage() {
         <p style={{ color: 'var(--muted)', fontSize: '0.875rem', margin: '0 0 1rem' }}>
           Rep range controls when weight increases; speed controls how boldly the algorithm responds to positive check-in signals.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', paddingBottom: '0.35rem', marginBottom: '0.1rem', borderBottom: '1px solid var(--border)' }}>
-            <span style={{ width: '6.5rem', flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--dim)', fontWeight: '600' }}>Rep range</span>
-            <span style={{ flex: 1, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--dim)', fontWeight: '600' }}>Progression</span>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {mgSettings.map(({ muscle_group, rep_range, aggressiveness }) => (
-            <div key={muscle_group} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.5rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
-              <span style={{ width: '6rem', flexShrink: 0, fontWeight: '500', color: 'var(--text)', textTransform: 'capitalize', fontSize: '0.9rem' }}>{muscle_group}</span>
-              <div style={{ flex: 1, display: 'flex', gap: '0.25rem' }}>
-                {REP_RANGE_OPTIONS.map(({ v, l, title }) => (
-                  <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'rep_range', v)}
-                    style={{ flex: 1, padding: '0.3rem 0', border: `1px solid ${rep_range === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '6px', fontSize: '0.78rem', background: rep_range === v ? 'var(--btn)' : 'var(--surface)', color: rep_range === v ? 'var(--btn-text)' : 'var(--muted)', fontWeight: rep_range === v ? '600' : 'normal', cursor: 'pointer' }}>
-                    {l}
-                  </button>
-                ))}
+            <div key={muscle_group} style={{
+              display: 'flex', flexDirection: 'column', gap: '0.65rem',
+              padding: '0.85rem 0.9rem',
+              border: '1px solid var(--border)', borderRadius: '10px',
+              background: 'var(--surface)',
+            }}>
+              <span style={{
+                fontWeight: '600', color: 'var(--text)', textTransform: 'capitalize', fontSize: '0.95rem',
+              }}>{muscle_group}</span>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: '600', marginBottom: '0.3rem' }}>Rep range</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.35rem' }}>
+                  {REP_RANGE_OPTIONS.map(({ v, l, title }) => (
+                    <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'rep_range', v)}
+                      style={{ padding: '0.55rem 0', minHeight: '40px', border: `1px solid ${rep_range === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px', fontSize: '0.85rem', background: rep_range === v ? 'var(--btn)' : 'var(--surface2)', color: rep_range === v ? 'var(--btn-text)' : 'var(--text)', fontWeight: rep_range === v ? '600' : '500', cursor: 'pointer' }}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div style={{ flex: 1, display: 'flex', gap: '0.25rem' }}>
-                {AGGRESSIVENESS_OPTIONS.map(({ v, l, title }) => (
-                  <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'aggressiveness', v)}
-                    style={{ flex: 1, padding: '0.3rem 0', border: `1px solid ${aggressiveness === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '6px', fontSize: '0.78rem', background: aggressiveness === v ? 'var(--btn)' : 'var(--surface)', color: aggressiveness === v ? 'var(--btn-text)' : 'var(--muted)', fontWeight: aggressiveness === v ? '600' : 'normal', cursor: 'pointer' }}>
-                    {l}
-                  </button>
-                ))}
+
+              <div>
+                <span style={{ display: 'block', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: '600', marginBottom: '0.3rem' }}>Progression</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.35rem' }}>
+                  {AGGRESSIVENESS_OPTIONS.map(({ v, l, title }) => (
+                    <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'aggressiveness', v)}
+                      style={{ padding: '0.55rem 0', minHeight: '40px', border: `1px solid ${aggressiveness === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px', fontSize: '0.85rem', background: aggressiveness === v ? 'var(--btn)' : 'var(--surface2)', color: aggressiveness === v ? 'var(--btn-text)' : 'var(--text)', fontWeight: aggressiveness === v ? '600' : '500', cursor: 'pointer' }}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           ))}
@@ -257,17 +276,22 @@ export function SetupPage() {
         {customs.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>No custom exercises yet. Create one from the Schedule exercise picker.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {customs.map(ex => (
-              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: '500', color: 'var(--text)' }}>{ex.name}</span>
-                  <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{ex.muscle_group}</span>
+              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.7rem 0.85rem', minHeight: '52px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontWeight: '500', fontSize: '0.95rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
+                  <span style={{ display: 'flex', gap: '0.5rem', fontSize: '0.72rem', color: 'var(--dim)' }}>
+                    <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: `var(--mc-${ex.muscle_group}, var(--muted))` }}>{ex.muscle_group}</span>
+                    <span>·</span>
+                    <span style={{ color: 'var(--muted)', textTransform: 'capitalize' }}>{ex.equipment}</span>
+                  </span>
                 </div>
-                <span style={{ fontSize: '0.78rem', color: 'var(--dim)', textTransform: 'capitalize' }}>{ex.equipment}</span>
-                <button onClick={() => setEdit(ex)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '5px', color: 'var(--muted)', fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>Edit</button>
+                <button onClick={() => setEdit(ex)}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '0.82rem', padding: '0.5rem 0.75rem', minHeight: '40px', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
                 <button onClick={async () => { await api.deleteExercise(ex.id); setCustoms(c => c.filter(e => e.id !== ex.id)); }}
-                  style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '1rem', padding: '0 4px' }}>✕</button>
+                  aria-label="Remove custom exercise"
+                  style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '1.1rem', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '6px' }}>✕</button>
               </div>
             ))}
           </div>
@@ -282,7 +306,7 @@ export function SetupPage() {
 
         {updateState === 'idle' && (
           <button onClick={handleUpdate}
-            style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}>
+            style={{ padding: '0.85rem 1.4rem', minHeight: '46px', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer' }}>
             Update to latest
           </button>
         )}
@@ -294,23 +318,23 @@ export function SetupPage() {
         )}
         {updateState === 'done' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'flex-start' }}>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--success)' }}>Updated to {version}.</p>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--success)' }}>Updated to {version}.</p>
             <button onClick={() => window.location.reload()}
-              style={{ padding: '0.55rem 1.25rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}>
+              style={{ padding: '0.85rem 1.4rem', minHeight: '46px', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer' }}>
               Reload page
             </button>
           </div>
         )}
         {updateState === 'error' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--danger)' }}>Update failed.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', alignItems: 'flex-start' }}>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--danger)' }}>Update failed.</p>
             {updateLog && (
-              <pre style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem 0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '12rem', overflowY: 'auto', width: '100%' }}>
+              <pre style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.65rem 0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '12rem', overflowY: 'auto', width: '100%' }}>
                 {updateLog}
               </pre>
             )}
             <button onClick={() => { setUpdateState('idle'); setUpdateLog(''); }}
-              style={{ padding: '0.4rem 0.9rem', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--muted)', fontSize: '0.875rem', cursor: 'pointer' }}>
+              style={{ padding: '0.65rem 1.1rem', minHeight: '40px', background: 'none', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '0.9rem', fontWeight: '500', cursor: 'pointer' }}>
               Dismiss
             </button>
           </div>

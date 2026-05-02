@@ -11,12 +11,13 @@ const GLYPHS = [
 ];
 
 const field = {
-  padding: '0.55rem 0.75rem',
+  padding: '0.75rem 0.85rem',
+  minHeight: '46px',
   border: '1px solid var(--border)',
   borderRadius: '8px',
   background: 'var(--input-bg)',
   color: 'var(--text)',
-  fontSize: '1rem',
+  fontSize: '16px',
   width: '100%',
   boxSizing: 'border-box',
 };
@@ -63,10 +64,11 @@ export default function AuthPage() {
 
   const tabBtn = (t, label) => (
     <button type="button" onClick={() => switchTab(t)} style={{
-      flex: 1, padding: '0.6rem', background: 'none', border: 'none',
+      flex: 1, padding: '0.95rem', minHeight: '48px',
+      background: 'none', border: 'none',
       borderBottom: `2px solid ${tab === t ? 'var(--text)' : 'transparent'}`,
       color: tab === t ? 'var(--text)' : 'var(--muted)',
-      fontWeight: tab === t ? '700' : 'normal',
+      fontWeight: tab === t ? '700' : '500',
       fontSize: '0.95rem', cursor: 'pointer',
     }}>{label}</button>
   );
@@ -98,12 +100,16 @@ export default function AuthPage() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Choose a glyph</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '6px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
                     {GLYPHS.map(g => (
                       <button key={g} type="button" onClick={() => setGlyph(g)} style={{
-                        padding: '6px', border: `2px solid ${glyph === g ? 'var(--text)' : 'var(--border)'}`,
-                        borderRadius: '8px', background: glyph === g ? 'var(--surface3)' : 'var(--surface2)',
-                        fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1,
+                        aspectRatio: '1 / 1',
+                        minHeight: '44px',
+                        border: `2px solid ${glyph === g ? 'var(--text)' : 'var(--border)'}`,
+                        borderRadius: '8px',
+                        background: glyph === g ? 'var(--surface3)' : 'var(--surface2)',
+                        fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'border-color 0.1s, background 0.1s',
                       }}>{g}</button>
                     ))}
@@ -134,7 +140,8 @@ export default function AuthPage() {
             )}
 
             <button type="submit" disabled={busy} style={{
-              padding: '0.75rem', background: 'var(--btn)', color: 'var(--btn-text)',
+              padding: '0.95rem', minHeight: '48px',
+              background: 'var(--btn)', color: 'var(--btn-text)',
               border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '1rem',
               cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, marginTop: '0.25rem',
             }}>

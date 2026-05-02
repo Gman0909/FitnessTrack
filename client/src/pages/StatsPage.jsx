@@ -69,16 +69,16 @@ function ResetModal({ onClose, onDone }) {
   }
 
   const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' };
-  const box     = { background: 'var(--surface2)', borderRadius: '12px', padding: '1.5rem', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '1rem' };
-  const inp     = { padding: '0.5rem 0.65rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--input-bg)', color: 'var(--text)', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem' };
+  const box     = { background: 'var(--surface2)', borderRadius: '12px', padding: '1.25rem', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '1rem' };
+  const inp     = { padding: '0.7rem 0.85rem', minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--input-bg)', color: 'var(--text)', width: '100%', boxSizing: 'border-box', fontSize: '16px' };
 
   if (backup) return (
     <div style={overlay}>
       <div style={box}>
-        <strong style={{ color: 'var(--text)' }}>Data reset complete</strong>
-        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted)' }}>All training data deleted. Backup saved to:</p>
-        <code style={{ fontSize: '0.78rem', color: 'var(--dim)', background: 'var(--surface)', padding: '0.5rem 0.75rem', borderRadius: '6px', wordBreak: 'break-all' }}>{backup}</code>
-        <button onClick={onClose} style={{ padding: '0.5rem 1rem', border: 'none', borderRadius: '6px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '600', cursor: 'pointer' }}>Done</button>
+        <strong style={{ color: 'var(--text)', fontSize: '1rem' }}>Data reset complete</strong>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.5 }}>All training data deleted. Backup saved to:</p>
+        <code style={{ fontSize: '0.78rem', color: 'var(--dim)', background: 'var(--surface)', padding: '0.6rem 0.75rem', borderRadius: '6px', wordBreak: 'break-all' }}>{backup}</code>
+        <button onClick={onClose} style={{ padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer' }}>Done</button>
       </div>
     </div>
   );
@@ -87,23 +87,25 @@ function ResetModal({ onClose, onDone }) {
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={box}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong style={{ color: '#e05c8a' }}>Reset all training data</strong>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+          <strong style={{ color: '#e05c8a', fontSize: '1rem' }}>Reset all training data</strong>
+          <button onClick={onClose} aria-label="Close"
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1, width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '-8px' }}>✕</button>
         </div>
-        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted)', lineHeight: 1.55 }}>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.55 }}>
           Permanently deletes all sessions, logged sets, check-ins, and set targets.
           A timestamped backup is created before deletion.
         </p>
         <div>
           <p style={{ margin: '0 0 0.35rem', fontSize: '0.8rem', color: 'var(--dim)' }}>Type to confirm:</p>
-          <p style={{ margin: '0 0 0.5rem', fontSize: '0.82rem', fontStyle: 'italic', color: 'var(--muted)', userSelect: 'all' }}>erase all training data</p>
+          <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--muted)', userSelect: 'all' }}>erase all training data</p>
           <input value={typed} onChange={e => setTyped(e.target.value)} placeholder="Type the phrase above…"
             autoFocus style={inp} />
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '0.45rem 1rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'none', color: 'var(--muted)', cursor: 'pointer' }}>Cancel</button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={onClose}
+            style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--text)', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleReset} disabled={!ok || loading}
-            style={{ padding: '0.45rem 1.25rem', border: 'none', borderRadius: '6px', background: ok ? '#c0392b' : 'var(--surface)', color: ok ? '#fff' : 'var(--dim)', fontWeight: '600', cursor: ok ? 'pointer' : 'not-allowed', transition: 'background 0.15s' }}>
+            style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: ok ? '#c0392b' : 'var(--surface)', color: ok ? '#fff' : 'var(--dim)', fontWeight: '700', fontSize: '0.95rem', cursor: ok ? 'pointer' : 'not-allowed', transition: 'background 0.15s' }}>
             {loading ? 'Resetting…' : 'Reset everything'}
           </button>
         </div>
@@ -188,12 +190,12 @@ export function StatsPage() {
   return (
     <div>
       {/* Header + scope toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', gap: '0.75rem', flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, color: 'var(--text)' }}>Stats</h2>
         <div style={{ display: 'flex', gap: '0.3rem' }}>
           {[['all', 'All time'], ['active', 'This plan']].map(([s, l]) => (
             <button key={s} onClick={() => setScope(s)}
-              style={{ padding: '0.3rem 0.75rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', background: scope === s ? 'var(--btn)' : 'var(--surface)', color: scope === s ? 'var(--btn-text)' : 'var(--muted)' }}>
+              style={{ padding: '0.5rem 0.95rem', minHeight: '38px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.85rem', fontWeight: scope === s ? '600' : '500', cursor: 'pointer', background: scope === s ? 'var(--btn)' : 'var(--surface)', color: scope === s ? 'var(--btn-text)' : 'var(--text)' }}>
               {l}
             </button>
           ))}
@@ -293,15 +295,15 @@ export function StatsPage() {
         <Section title="Exercise Progression" />
         <select value={selEx?.exercise_id ?? ''}
           onChange={e => setSelEx(exercises.find(x => x.exercise_id === Number(e.target.value)) ?? null)}
-          style={{ padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.9rem', width: '100%', background: 'var(--input-bg)', color: 'var(--text)', marginBottom: '0.5rem' }}>
+          style={{ padding: '0.7rem 0.85rem', minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '16px', width: '100%', background: 'var(--input-bg)', color: 'var(--text)', marginBottom: '0.65rem' }}>
           <option value="">Select an exercise…</option>
           {exercises.map(x => <option key={x.exercise_id} value={x.exercise_id}>{x.name}</option>)}
         </select>
         {selEx && <>
-          <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.65rem' }}>
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
             {[['volume', 'Volume'], ['max_weight', 'Max weight']].map(([k, l]) => (
               <button key={k} onClick={() => setExMetric(k)}
-                style={{ padding: '0.25rem 0.7rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', background: exMetric === k ? 'var(--btn)' : 'var(--surface)', color: exMetric === k ? 'var(--btn-text)' : 'var(--text)' }}>
+                style={{ padding: '0.5rem 0.95rem', minHeight: '38px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.85rem', fontWeight: exMetric === k ? '600' : '500', cursor: 'pointer', background: exMetric === k ? 'var(--btn)' : 'var(--surface)', color: exMetric === k ? 'var(--btn-text)' : 'var(--text)' }}>
                 {l}
               </button>
             ))}
@@ -367,18 +369,19 @@ export function StatsPage() {
         <p style={{ margin: '0 0 0.85rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
           Downloads respect the <em>All time / This plan</em> scope above. Data is always in kg.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {EXPORTS.map(({ type, label, desc }) => (
-            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.55rem 0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 0.85rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>{label}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--dim)', marginTop: '0.1rem' }}>{desc}</div>
+                <div style={{ fontSize: '0.92rem', color: 'var(--text)', fontWeight: '500' }}>{label}</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--dim)', marginTop: '0.15rem', lineHeight: 1.4 }}>{desc}</div>
               </div>
               <button
                 onClick={() => handleExport(type)}
                 disabled={exporting !== null}
-                style={{ padding: '0.3rem 0.75rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--surface2)', color: exporting === type ? 'var(--dim)' : 'var(--text)', fontSize: '0.8rem', cursor: exporting !== null ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                {exporting === type ? 'Downloading…' : 'Download CSV'}
+                aria-label={`Download ${label} CSV`}
+                style={{ padding: '0.55rem 0.85rem', minHeight: '40px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface2)', color: exporting === type ? 'var(--dim)' : 'var(--text)', fontSize: '0.82rem', fontWeight: '500', cursor: exporting !== null ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {exporting === type ? '…' : 'CSV'}
               </button>
             </div>
           ))}
@@ -392,7 +395,7 @@ export function StatsPage() {
           Permanently delete all training data. A backup is created automatically before deletion.
         </p>
         <button onClick={() => setShowReset(true)}
-          style={{ padding: '0.45rem 1.1rem', border: '1px solid var(--danger)', borderRadius: '6px', background: 'none', color: 'var(--danger)', fontSize: '0.855rem', cursor: 'pointer' }}>
+          style={{ padding: '0.7rem 1.1rem', minHeight: '44px', border: '1px solid var(--danger)', borderRadius: '8px', background: 'none', color: 'var(--danger)', fontSize: '0.9rem', fontWeight: '500', cursor: 'pointer' }}>
           Reset training data…
         </button>
       </div>
