@@ -227,6 +227,12 @@ if (!cols('session_checkins').includes('pause_weight'))
 if (!cols('sessions').includes('unlocked'))
   db.exec('ALTER TABLE sessions ADD COLUMN unlocked INTEGER NOT NULL DEFAULT 0');
 
+// Distinguish user-entered starting suggestions from algorithm-computed targets.
+// Suggestions are shown in the UI as pre-fills but are never used by the
+// progression algorithm, which instead bootstraps from the first logged session.
+if (!cols('set_targets').includes('is_suggestion'))
+  db.exec('ALTER TABLE set_targets ADD COLUMN is_suggestion INTEGER NOT NULL DEFAULT 0');
+
 // Clear stale dates on currently-blank, never-finalized sessions. Earlier
 // versions stamped session.date at slot-creation time (when the user merely
 // navigated to the slot). The new rule is: blank sessions have NULL date and

@@ -255,16 +255,20 @@ router.post('/:id/checkin', (req, res) => {
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   const loggedSets = db.prepare(`
-    SELECT ls.*, e.equipment FROM logged_sets ls
+    SELECT ls.*, e.equipment, e.default_increment FROM logged_sets ls
     JOIN exercises e ON e.id = ls.exercise_id
     WHERE ls.session_id = ? AND e.muscle_group = ?
   `).all(sessionId, muscle_group);
 
+  // Only consider algorithm-computed targets (is_suggestion = 0).
+  // User-entered starting suggestions are intentionally excluded — the algorithm
+  // bootstraps from the first actually-logged session instead (see setData below).
   const getTarget = db.prepare(`
     SELECT st.*, e.default_increment as increment, e.equipment
     FROM set_targets st JOIN exercises e ON e.id = st.exercise_id
     WHERE st.exercise_id = ? AND st.set_num = ?
       AND st.valid_from <= date('now') AND st.plan_id IS ?
+      AND st.is_suggestion = 0
     ORDER BY st.valid_from DESC LIMIT 1
   `);
 
@@ -282,8 +286,22 @@ router.post('/:id/checkin', (req, res) => {
   db.transaction(() => {
     for (const [exerciseId, sets] of byExercise) {
       const setData = sets
-        .map(ls => ({ set_num: ls.set_num, target: getTarget.get(exerciseId, ls.set_num, planId), logged: ls }))
-        .filter(s => s.target != null);
+        .map(ls => {
+          const target = getTarget.get(exerciseId, ls.set_num, planId);
+          if (target) return { set_num: ls.set_num, target, logged: ls };
+          // No algorithm target yet (first time this exercise is logged in this
+          // plan). Bootstrap: treat the logged weight/reps as the reference point
+          // so the algorithm can compute where to go next session.
+          if (!ls.skipped && ls.reps_done != null && ls.weight_used != null) {
+            return {
+              set_num: ls.set_num,
+              target:  { weight: ls.weight_used, reps: ls.reps_done, increment: ls.default_increment ?? 2.5, equipment: ls.equipment },
+              logged:  ls,
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
       if (!setData.length) continue;
 
       const newTargets = nextExerciseTargets(setData, modifier, {
@@ -305,7 +323,7 @@ router.post('/:id/checkin', (req, res) => {
   if (bwOver50.length > 0) {
     const getCount   = db.prepare('SELECT MAX(set_count) as n FROM schedule WHERE exercise_id = ? AND plan_id IS ?');
     const bumpCount  = db.prepare('UPDATE schedule SET set_count = set_count + 1 WHERE exercise_id = ? AND plan_id IS ? AND set_count < 6');
-    const getTarget  = db.prepare('SELECT weight, reps FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= date(\'now\') ORDER BY valid_from DESC LIMIT 1');
+    const getTarget  = db.prepare('SELECT weight, reps FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND is_suggestion = 0 AND valid_from <= date(\'now\') ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1');
     const insTarget  = db.prepare('INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, ?, ?)');
     db.transaction(() => {
       for (const exId of bwOver50) {

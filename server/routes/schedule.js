@@ -9,7 +9,7 @@ router.get('/', (_req, res) => {
            e.id as exercise_id, e.name, e.muscle_group, e.equipment,
            (SELECT st.weight FROM set_targets st
             WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
-            ORDER BY st.valid_from DESC LIMIT 1) as weight
+            ORDER BY st.is_suggestion ASC, st.valid_from DESC LIMIT 1) as weight
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     ORDER BY s.day_of_week, s.position
   `).all());
@@ -31,22 +31,34 @@ router.get('/today', (req, res) => {
     ORDER BY s.position
   `).all(dayOfWeek, activePlan.id);
 
+  // Prefer algorithm targets (is_suggestion=0) over user suggestions; fall back
+  // to the suggestion only when no algorithm target has been written yet.
   const getCurrent = db.prepare(`
     SELECT weight, reps FROM set_targets
     WHERE exercise_id = ? AND set_num = ? AND valid_from <= date('now') AND plan_id IS ?
-    ORDER BY valid_from DESC LIMIT 1
+    ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
   `);
+  // "Previous" means a genuinely older algorithm target — a different (earlier)
+  // valid_from date. Suggestions and same-date duplicates are excluded so the
+  // UI never shows a false volume-change hint on a first-time exercise.
   const getPrev = db.prepare(`
     SELECT weight, reps FROM set_targets
-    WHERE exercise_id = ? AND set_num = ? AND valid_from <= date('now') AND plan_id IS ?
-    ORDER BY valid_from DESC LIMIT 1 OFFSET 1
+    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
+      AND is_suggestion = 0
+      AND valid_from < (
+        SELECT MAX(valid_from) FROM set_targets
+        WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
+          AND is_suggestion = 0 AND valid_from <= date('now')
+      )
+    ORDER BY valid_from DESC LIMIT 1
   `);
 
   const result = slots.map(slot => {
     const sets = Array.from({ length: slot.set_count }, (_, i) => {
       const setNum  = i + 1;
       const target  = getCurrent.get(slot.exercise_id, setNum, slot.plan_id);
-      const prev    = getPrev.get(slot.exercise_id, setNum, slot.plan_id);
+      const prev    = getPrev.get(slot.exercise_id, setNum, slot.plan_id,
+                                  slot.exercise_id, setNum, slot.plan_id);
       return {
         set_num:     setNum,
         weight:      target?.weight ?? 20,
@@ -86,12 +98,22 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// Set initial weight/reps target for a scheduled exercise
+// Record the user's starting-weight suggestion for a scheduled exercise.
+// Suggestions are shown in the UI as pre-fills but are ignored by the
+// progression algorithm; the algorithm bootstraps from the first logged session.
+// Idempotent: if the exercise already has a suggestion for this plan (because
+// it appears on multiple days), the first entry wins and subsequent calls are
+// no-ops — targets are plan-wide, not per-day.
 router.post('/targets', (req, res) => {
   const { exercise_id, set_num, weight, reps, plan_id } = req.body;
+  const exists = db.prepare(
+    'SELECT 1 FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND is_suggestion = 1'
+  ).get(exercise_id, set_num, plan_id ?? null);
+  if (exists) return res.status(200).json({ id: null, skipped: true });
+
   const today = new Date().toISOString().split('T')[0];
   const result = db.prepare(
-    'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id, is_suggestion) VALUES (?, ?, ?, ?, ?, ?, 1)'
   ).run(exercise_id, set_num, weight, reps, today, plan_id ?? null);
   res.status(201).json({ id: result.lastInsertRowid });
 });

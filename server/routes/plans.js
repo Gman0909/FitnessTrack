@@ -17,7 +17,7 @@ function getPlanSlots(planId) {
            (SELECT st.weight FROM set_targets st
             WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
               AND st.plan_id IS s.plan_id
-            ORDER BY st.valid_from DESC LIMIT 1) as weight
+            ORDER BY st.is_suggestion ASC, st.valid_from DESC LIMIT 1) as weight
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     WHERE s.plan_id = ?
     ORDER BY s.day_of_week, s.position
@@ -154,7 +154,7 @@ router.post('/:id/clone', (req, res) => {
       const getTarget = db.prepare(`
         SELECT weight, reps FROM set_targets
         WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
-        ORDER BY valid_from DESC LIMIT 1
+        ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
       `);
       for (const slot of srcSlots) {
         for (let setNum = 1; setNum <= slot.set_count; setNum++) {
@@ -171,7 +171,7 @@ router.post('/:id/clone', (req, res) => {
       const getCurrentTarget = db.prepare(`
         SELECT weight, reps FROM set_targets
         WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= date('now')
-        ORDER BY valid_from DESC LIMIT 1
+        ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
       `);
       for (const slot of srcSlots) {
         for (let setNum = 1; setNum <= slot.set_count; setNum++) {
