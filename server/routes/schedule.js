@@ -3,16 +3,20 @@ import db from '../db.js';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
+router.get('/', (req, res) => {
   res.json(db.prepare(`
     SELECT s.id, s.day_of_week, s.set_count, s.position,
            e.id as exercise_id, e.name, e.muscle_group, e.equipment,
            (SELECT st.weight FROM set_targets st
             WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
+              AND st.plan_id IS s.plan_id
             ORDER BY st.is_suggestion ASC, st.valid_from DESC LIMIT 1) as weight
-    FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    FROM schedule s
+    JOIN exercises e ON e.id = s.exercise_id
+    JOIN workout_plans wp ON s.plan_id = wp.id
+    WHERE wp.user_id = ?
     ORDER BY s.day_of_week, s.position
-  `).all());
+  `).all(req.user.id));
 });
 
 router.get('/today', (req, res) => {
@@ -74,14 +78,20 @@ router.get('/today', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { day_of_week, exercise_id, set_count = 3, position = 0 } = req.body;
+  const { day_of_week, exercise_id, set_count = 3, position = 0, plan_id } = req.body;
+  if (!plan_id) return res.status(400).json({ error: 'plan_id required' });
+  if (!db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(plan_id, req.user.id))
+    return res.status(404).json({ error: 'Plan not found' });
   const result = db.prepare(
-    'INSERT INTO schedule (day_of_week, exercise_id, set_count, position) VALUES (?, ?, ?, ?)'
-  ).run(day_of_week, exercise_id, set_count, position);
+    'INSERT INTO schedule (day_of_week, exercise_id, set_count, position, plan_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(day_of_week, exercise_id, set_count, position, plan_id);
   res.status(201).json({ id: result.lastInsertRowid });
 });
 
 router.patch('/:id', (req, res) => {
+  const slot = db.prepare('SELECT plan_id FROM schedule WHERE id = ?').get(req.params.id);
+  if (!slot || !db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(slot.plan_id, req.user.id))
+    return res.status(404).json({ error: 'Not found' });
   const { set_count, position, day_of_week } = req.body;
   const fields = [], values = [];
   if (set_count   !== undefined) { fields.push('set_count = ?');   values.push(set_count); }
@@ -94,6 +104,9 @@ router.patch('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
+  const slot = db.prepare('SELECT plan_id FROM schedule WHERE id = ?').get(req.params.id);
+  if (!slot || !db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(slot.plan_id, req.user.id))
+    return res.status(404).json({ error: 'Not found' });
   db.prepare('DELETE FROM schedule WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -106,6 +119,8 @@ router.delete('/:id', (req, res) => {
 // no-ops — targets are plan-wide, not per-day.
 router.post('/targets', (req, res) => {
   const { exercise_id, set_num, weight, reps, plan_id } = req.body;
+  if (plan_id != null && !db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(plan_id, req.user.id))
+    return res.status(404).json({ error: 'Plan not found' });
   const exists = db.prepare(
     'SELECT 1 FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND is_suggestion = 1'
   ).get(exercise_id, set_num, plan_id ?? null);

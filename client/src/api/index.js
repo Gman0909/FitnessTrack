@@ -5,6 +5,10 @@ async function req(method, path, body) {
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent('auth:expired'));
+    throw new Error('Session expired');
+  }
   if (!res.ok) throw new Error(`${method} /api${path} → ${res.status}`);
   return res.json();
 }

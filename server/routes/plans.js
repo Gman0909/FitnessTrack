@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { slotDone } from '../../shared/slotDone.js';
 
 const router = Router();
 
@@ -243,8 +244,9 @@ router.get('/:id/calendar', (req, res) => {
   const userId    = req.user.id;
   const planId    = plan.id;
 
-  const getSlotSession = db.prepare(`
-    SELECT s.id, s.checked_in, s.unlocked, s.date,
+  // Batch-load all sessions for this plan — avoids N+1 (one query per week×day).
+  const allSessions = db.prepare(`
+    SELECT s.id, s.checked_in, s.unlocked, s.date, s.week_num, s.session_dow,
            COUNT(DISTINCT ls.exercise_id) as exercise_count,
            COUNT(DISTINCT CASE WHEN ls.skipped = 0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
              THEN ls.exercise_id END) as logged_count,
@@ -254,20 +256,22 @@ router.get('/:id/calendar', (req, res) => {
             WHERE ls2.session_id = s.id AND (ls2.skipped = 1 OR ls2.reps_done IS NOT NULL)) as done_sets
     FROM sessions s
     LEFT JOIN logged_sets ls ON ls.session_id = s.id
-    WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
+    WHERE s.plan_id = ? AND s.user_id = ?
     GROUP BY s.id
-  `);
+  `).all(planId, userId);
 
-  // A session is only "done" when explicitly checked in. Mirrors the predicate
-  // in routes/sessions.js — both must stay identical or the current-slot
-  // calculation diverges (per CLAUDE.md).
-  const slotDone = s => s && !s.unlocked && s.checked_in === 1;
+  const sessionMap = Object.fromEntries(
+    allSessions.map(s => [`${s.week_num}:${s.session_dow}`, s])
+  );
+  const getSlot = (w, d) => sessionMap[`${w}:${d}`] ?? null;
 
-  const getWeekDates = db.prepare(`
-    SELECT MIN(date) as start_date, MAX(date) as end_date
+  const allWeekDates = db.prepare(`
+    SELECT week_num, MIN(date) as start_date, MAX(date) as end_date
     FROM sessions
-    WHERE plan_id = ? AND week_num = ? AND user_id = ? AND date IS NOT NULL
-  `);
+    WHERE plan_id = ? AND user_id = ? AND date IS NOT NULL
+    GROUP BY week_num
+  `).all(planId, userId);
+  const weekDatesMap = Object.fromEntries(allWeekDates.map(r => [r.week_num, r]));
 
   // Pre-compute scheduled exercise count per workout day (same across all weeks)
   const getScheduledCount = db.prepare(
@@ -281,8 +285,7 @@ router.get('/:id/calendar', (req, res) => {
   let currentWeek = null, currentDow = null;
   outer: for (let w = 1; w <= weekCount; w++) {
     for (const d of workoutDays) {
-      const s = getSlotSession.get(planId, w, d, userId);
-      if (!slotDone(s)) { currentWeek = w; currentDow = d; break outer; }
+      if (!slotDone(getSlot(w, d))) { currentWeek = w; currentDow = d; break outer; }
     }
   }
   const curIdx = currentWeek != null
@@ -294,7 +297,7 @@ router.get('/:id/calendar', (req, res) => {
   for (let w = 1; w <= weekCount; w++) {
     const days = [];
     for (const d of workoutDays) {
-      const s      = getSlotSession.get(planId, w, d, userId);
+      const s      = getSlot(w, d);
       const reqIdx = (w - 1) * dayLen + workoutDays.indexOf(d);
       const isCurrent = currentWeek === w && currentDow === d;
       // Blank current slot has no stamped date yet — show today so the picker
@@ -310,7 +313,7 @@ router.get('/:id/calendar', (req, res) => {
         session:         s ? { id: s.id, checked_in: s.checked_in, exercise_count: s.exercise_count, logged_count: s.logged_count } : null,
       });
     }
-    const dates = getWeekDates.get(planId, w, userId);
+    const dates = weekDatesMap[w] ?? null;
     weeks.push({ week_num: w, start_date: dates?.start_date ?? null, end_date: dates?.end_date ?? null, days });
   }
 

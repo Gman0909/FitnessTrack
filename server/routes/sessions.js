@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { nextExerciseTargets, computeCheckinModifier } from '../../shared/algorithm.js';
+import { slotDone } from '../../shared/slotDone.js';
 
 const router = Router();
 
@@ -39,12 +40,6 @@ router.get('/slot', (req, res) => {
     FROM sessions s
     WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
   `);
-
-  // A session is only "done" when explicitly checked in. The previous
-  // "done_sets >= expected_sets" fallback let Finish-Workout auto-skip
-  // the entire session past the check-in modal — no algorithm run, no
-  // set_targets update.
-  const slotDone = s => s && !s.unlocked && s.checked_in === 1;
 
   // Find current slot: first (week, dow) in sequence not yet workout-complete
   const maxScan   = Math.max(plan.week_count ?? 4, weekNum) + 1;

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import db, { jwtSecret } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -9,8 +10,17 @@ const router = Router();
 const COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'lax',
+  secure: true,
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later' },
+});
 
 function setToken(res, userId) {
   const token = jwt.sign({ id: userId }, jwtSecret, { expiresIn: '7d' });
@@ -58,7 +68,7 @@ router.post('/register', async (req, res) => {
   res.status(201).json(publicUser(user));
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username?.trim()?.toLowerCase() ?? '');
   if (!user) return res.status(401).json({ error: 'Invalid username or password' });

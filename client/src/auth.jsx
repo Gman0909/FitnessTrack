@@ -10,6 +10,12 @@ export function AuthProvider({ children }) {
     api.getMe().then(setUser).catch(() => setUser(null));
   }, []);
 
+  useEffect(() => {
+    function handleExpired() { setUser(null); }
+    window.addEventListener('auth:expired', handleExpired);
+    return () => window.removeEventListener('auth:expired', handleExpired);
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, setUser }}>
       {children}
