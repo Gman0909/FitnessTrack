@@ -207,11 +207,14 @@ router.post('/reset', async (req, res) => {
     db.transaction(() => {
       for (const { id } of db.prepare('SELECT id FROM workout_plans WHERE user_id = ?').all(uid))
         db.prepare('DELETE FROM set_targets WHERE plan_id = ?').run(id);
-      // Also wipe orphaned targets (plan was deleted before the reset ran) and
-      // plan_id=NULL legacy targets — these survive the per-plan loop above and
-      // would otherwise ghost into the next plan's queries.
+      // Also wipe targets for legacy plans (user_id IS NULL, created before
+      // multi-user support) and fully orphaned targets (plan row deleted).
+      // Both are invisible to the per-plan loop above but can ghost into future
+      // plan queries if left behind.
       db.prepare(
-        'DELETE FROM set_targets WHERE plan_id IS NULL OR plan_id NOT IN (SELECT id FROM workout_plans)'
+        `DELETE FROM set_targets WHERE plan_id IS NULL
+           OR plan_id IN (SELECT id FROM workout_plans WHERE user_id IS NULL)
+           OR plan_id NOT IN (SELECT id FROM workout_plans)`
       ).run();
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(uid);
     })();
