@@ -1012,7 +1012,7 @@ export default function TodayPage() {
   // ── Auto-trigger check-in ─────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (pendingCheckin !== null) return;
+    if (pendingCheckin !== null || sessLoading) return;
     const next = groups.find(g =>
       groupIsDone(g) &&
       !checkedInGroups.has(g.muscle_group) &&
@@ -1020,7 +1020,7 @@ export default function TodayPage() {
       groupHasLoggedSets(g)
     );
     if (next) setPending(next.muscle_group);
-  }, [setStatuses, pendingCheckin, checkedInGroups, dismissedGroups]); // eslint-disable-line
+  }, [setStatuses, pendingCheckin, checkedInGroups, dismissedGroups, sessLoading]); // eslint-disable-line
 
   // ── Per-set actions ───────────────────────────────────────────────────────────
 
