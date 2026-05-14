@@ -861,7 +861,7 @@ export default function TodayPage() {
       const { weekNum, dow } = selectedSlot;
       const [slotData, exs] = await Promise.all([
         api.getSessionForSlot(activePlan.id, weekNum, dow),
-        api.getScheduleForDay(dow),
+        api.getScheduleForDay(dow, weekNum),
       ]);
 
       const { session: sess, is_locked, is_current } = slotData;

@@ -28,8 +28,8 @@ export const api = {
   resetCheckin:      (id, mg)   => req('DELETE', `/sessions/${id}/checkins/${encodeURIComponent(mg)}`),
 
   // Schedule
-  getScheduleToday:   ()         => req('GET',    '/schedule/today'),
-  getScheduleForDay:  (dow)      => req('GET',    `/schedule/today?dow=${dow}`),
+  getScheduleToday:   ()              => req('GET', '/schedule/today'),
+  getScheduleForDay:  (dow, week)     => req('GET', `/schedule/today?dow=${dow}${week != null ? `&week=${week}` : ''}`),
   getSchedule:        ()         => req('GET',    '/schedule'),
   addToSchedule:      (body)     => req('POST',   '/schedule', body),
   updateScheduleSlot: (id, body) => req('PATCH',  `/schedule/${id}`, body),

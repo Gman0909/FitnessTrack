@@ -23,6 +23,7 @@ router.get('/today', (req, res) => {
   const dayOfWeek  = req.query.dow !== undefined
     ? parseInt(req.query.dow, 10)
     : (new Date().getDay() + 6) % 7;
+  const weekNum    = req.query.week !== undefined ? parseInt(req.query.week, 10) : null;
   const activePlan = db.prepare('SELECT id FROM workout_plans WHERE is_active = 1 AND user_id = ?').get(req.user.id);
   if (!activePlan) return res.json([]);
 
@@ -35,6 +36,18 @@ router.get('/today', (req, res) => {
     ORDER BY s.position
   `).all(dayOfWeek, activePlan.id);
 
+  // The session being viewed (when week is provided). Its date — when set —
+  // serves as the cutoff for prev: only logs from sessions strictly before
+  // this one count. Without a viewing session (or with a future, undated one),
+  // any prior log qualifies.
+  const viewingSess = weekNum != null
+    ? db.prepare(
+        'SELECT id, date FROM sessions WHERE plan_id = ? AND week_num = ? AND session_dow = ? AND user_id = ?'
+      ).get(activePlan.id, weekNum, dayOfWeek, req.user.id)
+    : null;
+  const viewingDate = viewingSess?.date ?? null;
+  const viewingId   = viewingSess?.id   ?? null;
+
   // Latest algorithm target (any valid_from). Prefer algorithm rows over user
   // suggestions; fall back to the suggestion only when no algorithm target has
   // been written. Future-dated targets (written by today's check-in for the
@@ -45,20 +58,26 @@ router.get('/today', (req, res) => {
     WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
     ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
   `);
-  // "Previous" is the user's most recently logged completion of this set
-  // (any prior checked-in session). Compared to the algorithm's current
-  // target, this drives the volume-change hint: "what the algorithm wants
-  // you to do now vs what you actually did last time".
+  // "Previous" is the user's most recently logged completion of this set,
+  // from a session strictly before the one being viewed. Comparing the
+  // algorithm's current target against this drives the volume-change hint.
+  // The date guard prevents Day-2-just-finished views from being compared
+  // to their own logged sets (which would be a self-comparison, not progress).
   const getPrev = db.prepare(`
     SELECT ls.weight_used as weight, ls.reps_done as reps
     FROM logged_sets ls
     JOIN sessions s ON s.id = ls.session_id
-    WHERE ls.exercise_id = ? AND ls.set_num = ?
-      AND s.plan_id IS ? AND s.user_id = ?
+    WHERE ls.exercise_id = @ex AND ls.set_num = @set
+      AND s.plan_id IS @plan AND s.user_id = @user
       AND s.checked_in = 1
       AND ls.skipped = 0
       AND ls.reps_done IS NOT NULL
       AND ls.weight_used IS NOT NULL
+      AND (
+        @date IS NULL
+        OR s.date < @date
+        OR (s.date = @date AND s.id < @id)
+      )
     ORDER BY s.date DESC, s.id DESC
     LIMIT 1
   `);
@@ -70,7 +89,14 @@ router.get('/today', (req, res) => {
       // Suppress prev when there's no real target — comparing the 20/8 default
       // against a stray logged set produces a misleading hint.
       const prev    = target
-        ? getPrev.get(slot.exercise_id, setNum, slot.plan_id, req.user.id)
+        ? getPrev.get({
+            ex:   slot.exercise_id,
+            set:  setNum,
+            plan: slot.plan_id,
+            user: req.user.id,
+            date: viewingDate,
+            id:   viewingId,
+          })
         : null;
       return {
         set_num:     setNum,
