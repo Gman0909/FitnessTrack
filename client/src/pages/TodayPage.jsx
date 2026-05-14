@@ -641,19 +641,55 @@ function ExerciseCard({ exercise, isGroupCheckedIn, onResetCheckin, onAddSet, on
   };
   const lastSetDone = isSetDone(exercise.sets.length);
 
-  // Volume hint: total session volume (weight × reps across all sets), current vs previous targets
+  // Volume hint: arrow + % volume delta, plus the algorithm's primary weight
+  // bump and the total reps delta — compared to the user's most recent logged
+  // completion of this exercise. Only sets with a genuine prior baseline count;
+  // sets newly added to the schedule are excluded so they don't distort math.
   let volumeHint = null;
-  if (!isBodyweight && exercise.sets.some(s => s.prev_weight != null || s.prev_reps != null)) {
-    const toDisp  = kg => unit === 'lbs' ? kg * 2.2046 : kg;
-    const curVol  = exercise.sets.reduce((sum, s) => sum + toDisp(s.weight  ?? 0) * (s.reps      ?? 0), 0);
-    const prevVol = exercise.sets.reduce((sum, s) => sum + toDisp((s.prev_weight ?? s.weight) ?? 0) * ((s.prev_reps ?? s.reps) ?? 0), 0);
-    const delta   = curVol - prevVol;
-    const pct     = prevVol > 0 ? (delta / prevVol) * 100 : 0;
-    if (Math.abs(delta) > 0.01) {
-      volumeHint = {
-        text:  `${delta > 0 ? '▲' : '▼'} ${Math.round(curVol)} ${unit}·reps (${delta > 0 ? '+' : ''}${Math.round(pct)}%)`,
-        color: delta > 0 ? 'var(--success)' : 'var(--danger)',
+  const matched = isBodyweight
+    ? []
+    : exercise.sets.filter(s => s.prev_weight != null && s.prev_reps != null);
+
+  if (matched.length > 0) {
+    const toDisp = kg => unit === 'lbs' ? kg * 2.2046 : kg;
+    let curVol = 0, prevVol = 0, curReps = 0, prevReps = 0;
+    let mainSet = matched[0];
+    for (const s of matched) {
+      curVol   += toDisp(s.weight) * s.reps;
+      prevVol  += toDisp(s.prev_weight) * s.prev_reps;
+      curReps  += s.reps;
+      prevReps += s.prev_reps;
+      if (s.prev_weight > mainSet.prev_weight) mainSet = s;
+    }
+    const volDelta  = curVol - prevVol;
+    const pct       = prevVol > 0 ? (volDelta / prevVol) * 100 : 0;
+    const repsDelta = curReps - prevReps;
+    // Heaviest prev set drives the displayed weight delta — that's the set
+    // the algorithm uses as its reference, so it best represents the bump.
+    const wDelta = toDisp(mainSet.weight) - toDisp(mainSet.prev_weight);
+
+    const hasVol  = Math.abs(volDelta) > 0.01;
+    const hasW    = Math.abs(wDelta) >= 0.05;
+    const hasReps = repsDelta !== 0;
+
+    if (hasVol || hasW || hasReps) {
+      const fmtW = w => {
+        const abs = Math.abs(w);
+        const num = abs < 1 ? abs.toFixed(1) : (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1));
+        return `${w > 0 ? '+' : '−'}${num} ${unit}`;
       };
+      const fmtR = r => `${r > 0 ? '+' : '−'}${Math.abs(r)} rep${Math.abs(r) !== 1 ? 's' : ''}`;
+
+      const parts = [];
+      parts.push(`(${volDelta > 0 ? '+' : volDelta < 0 ? '−' : ''}${Math.abs(Math.round(pct))}%)`);
+      if (hasW)    parts.push(fmtW(wDelta));
+      if (hasReps) parts.push(fmtR(repsDelta));
+
+      const arrow = volDelta > 0.01 ? '▲' : volDelta < -0.01 ? '▼' : '→';
+      const color = volDelta > 0.01 ? 'var(--success)'
+                  : volDelta < -0.01 ? 'var(--danger)'
+                  : 'var(--muted)';
+      volumeHint = { text: `${arrow} ${parts.join(' ')}`, color };
     }
   }
 
