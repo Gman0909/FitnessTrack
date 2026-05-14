@@ -119,10 +119,14 @@ export function nextExerciseTargets(setData, modifier, {
   let repsChange  = 0;
 
   if (!weightBlocked && hitCeiling) {
-    // Working set hit the ceiling: bump weight, recalculate reps to preserve volume
-    const newRef    = refWeight + incr;
-    weightRatio     = newRef / refWeight;
-    repsChange      = Math.ceil((refWeight * refSet.target.reps) / newRef) - refSet.target.reps;
+    // Reference set hit the ceiling: bump weight. Every set still gets +1 rep
+    // — the heaviest set's reps clamp at REP_MAX (so it stays put at the cap),
+    // while under-ceiling sets grow into their headroom. This preserves the
+    // pyramid shape and pushes overall volume up, instead of contracting reps
+    // proportionally as the old volume-preserving formula did.
+    const newRef = refWeight + incr;
+    weightRatio  = newRef / refWeight;
+    repsChange   = 1;
   } else if (significantMiss) {
     repsChange = 0; // hold
   } else {
@@ -132,14 +136,16 @@ export function nextExerciseTargets(setData, modifier, {
   // Apply amplified modifier
   let totalRepsChange = Math.round(repsChange + ampModifier);
 
-  // Cascade: if modifier pushed reps over ceiling without a weight bump, trigger one
+  // Cascade: if amplified reps would push refSet over ceiling without a weight
+  // bump, trigger one — and reset to standard +1 rep. The modifier signal is
+  // "spent" on the weight bump; further rep growth comes from the clamp on
+  // under-ceiling sets next session.
   if (!weightBlocked && weightRatio === 1.0 && !significantMiss) {
     const projectedReps = refSet.target.reps + totalRepsChange;
     if (projectedReps > REP_MAX) {
-      const vol       = refWeight * projectedReps;
-      const newRef    = refWeight + incr;
-      weightRatio     = newRef / refWeight;
-      totalRepsChange = Math.ceil(vol / newRef) - refSet.target.reps;
+      const newRef = refWeight + incr;
+      weightRatio  = newRef / refWeight;
+      totalRepsChange = 1;
     }
   }
 
