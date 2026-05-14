@@ -483,21 +483,26 @@ function SetRow({
     onClickTick();
   };
 
+  // Disable inputs once a set is logged. Editing a logged value used to call
+  // handleClear, which silently wiped the muscle group's check-in. Now the
+  // user must un-tick (via the ✓) first, making the reset explicit.
+  const inputsLocked = isReadOnly || isLogged;
+  const lockedStyle  = isLogged ? { ...inputStyle, cursor: 'not-allowed' } : inputStyle;
   return (
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       {!isBodyweight && (
         <input type="number" value={weight} onChange={e => onWeightChange(e.target.value)}
           onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
           placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
-          disabled={isReadOnly}
-          style={inputStyle}
+          disabled={inputsLocked}
+          style={lockedStyle}
         />
       )}
       <input type="number" value={reps} onChange={e => onRepsChange(e.target.value)}
         onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
         placeholder={String(set.reps)} min="1" max="999"
-        disabled={isReadOnly}
-        style={inputStyle}
+        disabled={inputsLocked}
+        style={lockedStyle}
       />
       <div onClick={canLog ? onClickTick : undefined}
         style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0,

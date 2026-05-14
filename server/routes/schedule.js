@@ -35,34 +35,43 @@ router.get('/today', (req, res) => {
     ORDER BY s.position
   `).all(dayOfWeek, activePlan.id);
 
-  // Prefer algorithm targets (is_suggestion=0) over user suggestions; fall back
-  // to the suggestion only when no algorithm target has been written yet.
+  // Latest algorithm target (any valid_from). Prefer algorithm rows over user
+  // suggestions; fall back to the suggestion only when no algorithm target has
+  // been written. Future-dated targets (written by today's check-in for the
+  // next session) are included so the volume hint reflects what the algorithm
+  // recommends next, not what was active yesterday.
   const getCurrent = db.prepare(`
     SELECT weight, reps FROM set_targets
-    WHERE exercise_id = ? AND set_num = ? AND valid_from <= date('now') AND plan_id IS ?
+    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
     ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
   `);
-  // "Previous" means a genuinely older algorithm target — a different (earlier)
-  // valid_from date. Suggestions and same-date duplicates are excluded so the
-  // UI never shows a false volume-change hint on a first-time exercise.
+  // "Previous" is the user's most recently logged completion of this set
+  // (any prior checked-in session). Compared to the algorithm's current
+  // target, this drives the volume-change hint: "what the algorithm wants
+  // you to do now vs what you actually did last time".
   const getPrev = db.prepare(`
-    SELECT weight, reps FROM set_targets
-    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
-      AND is_suggestion = 0
-      AND valid_from < (
-        SELECT MAX(valid_from) FROM set_targets
-        WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
-          AND is_suggestion = 0 AND valid_from <= date('now')
-      )
-    ORDER BY valid_from DESC LIMIT 1
+    SELECT ls.weight_used as weight, ls.reps_done as reps
+    FROM logged_sets ls
+    JOIN sessions s ON s.id = ls.session_id
+    WHERE ls.exercise_id = ? AND ls.set_num = ?
+      AND s.plan_id IS ? AND s.user_id = ?
+      AND s.checked_in = 1
+      AND ls.skipped = 0
+      AND ls.reps_done IS NOT NULL
+      AND ls.weight_used IS NOT NULL
+    ORDER BY s.date DESC, s.id DESC
+    LIMIT 1
   `);
 
   const result = slots.map(slot => {
     const sets = Array.from({ length: slot.set_count }, (_, i) => {
       const setNum  = i + 1;
       const target  = getCurrent.get(slot.exercise_id, setNum, slot.plan_id);
-      const prev    = getPrev.get(slot.exercise_id, setNum, slot.plan_id,
-                                  slot.exercise_id, setNum, slot.plan_id);
+      // Suppress prev when there's no real target — comparing the 20/8 default
+      // against a stray logged set produces a misleading hint.
+      const prev    = target
+        ? getPrev.get(slot.exercise_id, setNum, slot.plan_id, req.user.id)
+        : null;
       return {
         set_num:     setNum,
         weight:      target?.weight ?? 20,
