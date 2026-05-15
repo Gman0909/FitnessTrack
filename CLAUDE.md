@@ -28,84 +28,94 @@ npm start              # serves API + built client on :3001
 ## Project structure
 
 ```
-shared/algorithm.js          # progressive overload logic — edit here for algorithm changes
+shared/
+  algorithm.js               # double-progression logic — edit here for algorithm changes
+  slotDone.js                # shared slot-completion predicate
 server/
   db.js                      # schema + column migrations (run directly to re-migrate)
-  seed.js                    # exercise library seed data (~55 exercises)
+  seed.js                    # exercise library seed data (~75 exercises) + sample plan
   index.js                   # Express entry point + route mounting
   middleware/auth.js          # JWT cookie middleware
   routes/
     auth.js                  # register, login, logout, /me
-    exercises.js             # exercise CRUD + equipment filter
-    schedule.js              # legacy schedule slots (mostly superseded by plans)
+    exercises.js             # exercise CRUD (incl. rep_min/rep_max) + equipment filter
+    schedule.js              # schedule slots + GET /today (per-set targets for a day)
     plans.js                 # workout plans CRUD, plan days, plan schedule, calendar
-    sessions.js              # session creation, set logging, check-in, unlock, history
+    sessions.js              # session access, set logging (auto-runs progression), unlock, history
     stats.js                 # aggregate stats + data reset
-    settings.js              # per-muscle-group training preferences
     admin.js                 # in-app git pull + rebuild update endpoint
 client/src/
   api/index.js               # all fetch wrappers — add new endpoints here first
   App.jsx                    # shell, nav, auth gate, routing
   auth.jsx                   # AuthProvider + useAuth hook
   units.js                   # kg/lbs unit context
+  components/
+    ExerciseEditModal.jsx    # shared editor: name, muscle group, equipment, increment, rep range, set count
   pages/
     TodayPage.jsx            # main workout logging screen (~1300 lines)
     PlansPage.jsx            # plan list
-    PlanDetailPage.jsx       # plan schedule editor + calendar
+    PlanDetailPage.jsx       # plan schedule editor + calendar (per-row exercise edit)
     SchedulePage.jsx         # exercise search + add-to-plan UI
     StatsPage.jsx            # volume charts, stat cards, data reset
     ProfilePage.jsx          # profile + unit toggle
     AuthPage.jsx             # register / login (redirects new users to /setup)
-    stubs.jsx                # SetupPage (equipment + training prefs) + in-app updater
+    stubs.jsx                # SetupPage (equipment + custom exercises) + in-app updater
 ```
 
 ## Database schema (key tables)
 
 - `users` — accounts with hashed passwords + JWT secret in `config`
+- `exercises` — exercise library; `muscle_group`, `equipment`, `default_increment`, `rep_min`/`rep_max` (per-exercise rep range), `is_custom`
 - `workout_plans` — named plans per user; `is_active` (one active at a time), `week_count`, `started_at`
 - `plan_days` — which days of week (0=Mon…6=Sun) belong to a plan
 - `schedule` — exercises per plan per day; `set_count`, `position` for ordering
-- `set_targets` — target weight + reps per exercise per set; `valid_from` date + `plan_id`; always query most recent row `WHERE valid_from <= date('now')`
-- `sessions` — identified by `(plan_id, week_num, session_dow, user_id)` UNIQUE; `checked_in`, `unlocked` flags
+- `set_targets` — target weight + reps per exercise per set; `valid_from` date + `plan_id`; the algorithm writes a new row per completed exercise. `is_suggestion` is a legacy flag (no longer written)
+- `sessions` — identified by `(plan_id, week_num, session_dow, user_id)` UNIQUE; `checked_in` (= "complete"), `unlocked` flags
 - `logged_sets` — actual logged weight/reps per set; `skipped` flag; `reps_done` NULL when skipped
-- `session_checkins` — per muscle group feedback (pain, recovery, pump, intensity, pause_weight) per session
-- `muscle_group_settings` — per-user rep_range + aggressiveness per muscle group
 
 ## Important conventions
 
 - `day_of_week` is **0=Monday … 6=Sunday** throughout (not JS convention where 0=Sunday)
-- After check-in, algorithm writes new `set_targets` rows with `valid_from = date('now', '+1 day')`
-- `set_targets` is append-only — never update, always insert new row
+- Logging a set re-runs progression for that exercise: the server writes the next-session `set_targets` rows with `valid_from = session.date + 1 day`
+- `set_targets` is append-only — never update, always insert a new row
 - Sessions are position-based (week_num, session_dow), not date-based
-- `slotDone(s)` — the key predicate used in both `sessions.js` and `plans.js`: `s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets))`. **Both files must use identical logic** or the current-slot calculation diverges.
+- `slotDone(s)` — the key predicate used in `sessions.js` and `plans.js`: `s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets))`. **All callers must use identical logic** or the current-slot calculation diverges.
 
 ## Algorithm (shared/algorithm.js)
 
-`nextExerciseTargets(setData, modifier, options)` — takes all sets for one exercise, returns next targets.
+**Dynamic double progression** — purely performance-based, no subjective check-ins.
 
-- **modifier**: computed by `computeCheckinModifier` from pain/recovery/pump/intensity ratings (-3 to +3, or `null` for high pain = hold everything)
-- **Heaviest active set** drives the weight-bump decision
-- **Worst-performing set** drives the hold decision
-- Weight changes applied **proportionally** to all sets (preserves pyramid/drop structure)
-- Weight rounded to nearest 0.5 kg; capped at 10% of working weight per jump
-- `repRange` setting (powerlifting 5–8, standard 8–12, volume 12–15) controls ceiling/floor
-- `aggressiveness` multiplier (0.5/1.0/1.5) scales positive modifier signals only
-- `pauseWeight` flag blocks weight increases (only reps progress)
-- Bodyweight exercises: reps-only axis, same logic but no weight changes
+`nextExerciseTargets(setData, { repMin, repMax, increment, equipment })` — takes all sets for one exercise, returns next per-set targets.
+
+Each set is its own progression track, comparing the user's actual logged reps to the target they were given:
+
+| Condition | Next target |
+|-----------|-------------|
+| `actual ≥ repMax` | weight + increment, reps → `repMin` |
+| `target ≤ actual < repMax` | reps → `min(repMax, actual + 1)`, weight unchanged |
+| `repMin ≤ actual < target` | hold (same weight + target reps) |
+| `actual < repMin` | weight − increment, reps → `repMin` |
+| skipped / unlogged | unchanged |
+
+- Per-set independence gives the "dynamic" pattern — the freshest set climbs and bumps weight first.
+- `increment` is the exercise's `default_increment`, capped at 10% of working weight; weights round to 0.5 kg.
+- Rep range `[repMin, repMax]` is per exercise (`exercises.rep_min/rep_max`).
+- **Bodyweight**: reps-only axis; reps climb toward `repMax` and hold there. When every set reaches `repMax`, `recomputeExercise` adds a set (cap 6).
+- `setPerformance(targetReps, actualReps)` → `'up' | 'met' | 'down'` for the UI's per-set glyph.
 
 ## Session lifecycle
 
-1. User navigates to a slot (week_num, session_dow) via TodayPage calendar
-2. Slot endpoint (`GET /sessions/slot`) finds or creates the session; returns `is_current` + `is_locked`
-3. User logs sets via SetRow components → `POST /sessions/:id/sets` (upserts)
-4. When all sets for a muscle group are logged, check-in modal fires automatically
-5. Check-in (`POST /sessions/:id/checkin`) runs algorithm, writes new set_targets, marks `checked_in=1`
-6. When all muscle groups are checked in, session is done; TodayPage reloads slot to get fresh `is_current`
-7. **Unlock**: completed sessions can be unlocked (`POST /sessions/:id/unlock`) — deletes checkins + next-day targets, sets `unlocked=1`. The session re-becomes "current" (`slotDone` returns false). After re-logging + re-checking-in, checkin endpoint sets `checked_in=1, unlocked=0`.
+1. User navigates to a slot (week_num, session_dow) via the TodayPage calendar.
+2. Slot endpoint (`GET /sessions/slot`) finds or creates the session; returns `is_current` + `is_locked`.
+3. User logs sets via SetRow components → `POST /sessions/:id/sets` (upserts). `DELETE` un-logs.
+4. **On every set change** the server runs `recomputeExercise`: when an exercise's sets are all logged/skipped it writes the next session's `set_targets`; when no longer complete it deletes them. `updateCompletion` sets `checked_in` when the whole day's schedule is logged/skipped. No modal, no check-in.
+5. The client derives `allDone` from set statuses; a completion effect refreshes the calendar and may surface the end-of-plan modal.
+6. **Unlock**: a completed session can be unlocked (`POST /sessions/:id/unlock`) — deletes the next-day targets, sets `unlocked=1, checked_in=0`. It re-becomes "current". Re-logging re-runs progression.
 
 ## Known subtleties
 
-- `allDone` in TodayPage has three paths: `checked_in===1`, all groups in `checkedInGroups`, OR (read-only session with `done_sets >= expected_sets`). The third path is needed for sessions completed without explicit check-in.
-- `handleFinishWorkout` clears `dismissedGroups` when all sets are already logged but no check-in — this re-triggers the auto-checkin effect (needed after unlock).
-- `preDismissed` suppresses check-in modals when navigating to past sessions; built from `initDone` at slot load time.
-- In-app update (`POST /admin/update`) runs `git pull && npm install && npm run build` then `process.exit(1)` to trigger systemd restart.
+- `recomputeExercise` and `updateCompletion` run inside the `POST/DELETE /sessions/:id/sets` transaction — set logging and target recomputation commit atomically.
+- The progressive-overload hint (target vs last logged performance) shows only on *in-progress* exercise cards; per-set ▲/=/▼ glyphs show actual vs target on logged sets.
+- New exercises start with an empty weight and reps at `rep_min` — there is no starting-weight prompt; the algorithm bootstraps from the first logged session.
+- Old `is_suggestion` rows in `set_targets` are still sorted (`ORDER BY is_suggestion ASC`) but nothing writes them anymore.
+- In-app update (`POST /admin/update`) runs `git pull && npm install && npm run build` then `process.exit(1)` to trigger a systemd restart.

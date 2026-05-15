@@ -6,18 +6,19 @@ Runs on a Raspberry Pi, a home server, or any machine with Node.js. Your data st
 
 ---
 
-| <img width="398" height="768" alt="FitnessTrack workout logging screen — log weight and reps per set with progressive overload targets" src="https://github.com/user-attachments/assets/d671a906-dbee-4347-8338-2f3362f584e3" /> | <img width="394" height="768" alt="FitnessTrack check-in modal — rate pain, recovery, pump and intensity to tune the next session" src="https://github.com/user-attachments/assets/a42cf1b7-8edc-44d0-b97c-a6ba0022d9bd" /> | <img width="396" height="768" alt="FitnessTrack workout plan calendar — week-by-week session grid with completion status" src="https://github.com/user-attachments/assets/ef5f2243-1bf8-4a10-a4f2-425cf770bb6d" /><br> |
+| <img width="398" height="768" alt="FitnessTrack workout logging screen — log weight and reps per set with progressive overload targets" src="https://github.com/user-attachments/assets/d671a906-dbee-4347-8338-2f3362f584e3" /> | <img width="394" height="768" alt="FitnessTrack progression feedback — per-set targets advance automatically via double progression" src="https://github.com/user-attachments/assets/a42cf1b7-8edc-44d0-b97c-a6ba0022d9bd" /> | <img width="396" height="768" alt="FitnessTrack workout plan calendar — week-by-week session grid with completion status" src="https://github.com/user-attachments/assets/ef5f2243-1bf8-4a10-a4f2-425cf770bb6d" /><br> |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 
 
 
 ## Features
 
-- **Progressive overload algorithm** — automatically calculates target weight and reps for each set based on your last session, with modifiers for pain, recovery, and pump
+- **Dynamic double progression** — each set climbs toward its rep-range ceiling, then adds weight and resets — automatically, based purely on the reps you actually log. No subjective check-ins
+- **Per-exercise rep ranges** — every exercise has an editable target rep range that drives its progression; seeded by movement type
 - **Workout plans** — create named plans with configurable training days and exercises; run multiple plans (one active at a time)
 - **Calendar view** — see every workout in a grid across weeks; navigate to any past or future session
 - **Per-session logging** — log weight and reps per set; skip individual sets or entire sessions
-- **Check-in system** — after each muscle group, rate pain, recovery, and pump to fine-tune the next session's targets
+- **Actual-vs-target feedback** — a per-set ▲ / = / ▼ glyph shows whether you beat, met, or missed each target
 - **Exercise history** — per-exercise weight progression chart
 - **Plan cycling** — when you finish the last session of a plan, the app prompts you to clone it into a new cycle with optional seed weights from any past week
 - **Multi-user** — each user has their own account, plans, and data; no data is shared between users
@@ -50,58 +51,52 @@ FitnessTrack is a self-hosted alternative to apps like Hevy, Strong, and JEFIT f
 
 ## How the algorithm works
 
-After every muscle group is logged, a check-in modal collects four ratings. Those ratings are summed into a single **modifier** that shapes the next session's targets.
+FitnessTrack uses **dynamic double progression**. Every exercise has a target rep range — e.g. 8–12 — and each set is its own progression track. There are no subjective check-ins: the next session's targets are derived purely from the reps you actually logged.
 
-### Rating scores
+### Per-set rules
 
-| Category | Option | Score |
+Comparing your **actual** logged reps against the **target** you were given:
+
+| Situation | Next session |
+|---|---|
+| Hit the top of the rep range | **Add weight** by one increment; reps reset to the bottom of the range |
+| Hit the target, still below the ceiling | **+1 rep**, same weight |
+| Fell short of the target but stayed in range | **Hold** — same weight and target, try again |
+| Couldn't reach the bottom of the range | **Ease off** — weight down one increment; reps reset to the bottom |
+| Skipped | Unchanged |
+
+Because each set advances independently, your first (freshest) set tends to climb fastest and earn a weight bump before the others — the "dynamic" in dynamic double progression. Later sets settle at their own level.
+
+Weight increments are the exercise's configured step, capped at 10% of the working weight and rounded to the nearest 0.5 kg.
+
+### Rep ranges
+
+Each exercise carries its own rep range, seeded by movement type and editable any time — tap the ✎ on an exercise card or plan row:
+
+| Movement type | Typical range |
+|---|---|
+| Heavy barbell compounds (deadlift, squat) | 4–8 |
+| Moderate compounds (rows, presses) | 8–10 |
+| Isolation (curls, extensions) | 8–12 |
+| Small isolation (lateral raises, kickbacks) | 12–20 |
+| Bodyweight | 12–20 |
+
+### Worked example (Incline Curl, range 8–12, +1 kg increment)
+
+| Session | You log | Next target |
 |---|---|---|
-| **Pain** | None | 0 |
-| | Low | −1 |
-| | Medium | −2 |
-| | High | *suspend — all targets held unchanged* |
-| **Recovery** | Never sore | +1 |
-| | Healed / Just in time | 0 |
-| | Still sore | −1 |
-| **Pump** | Poor | +1 |
-| | OK / Great | 0 |
-| **Intensity** | Too easy | +2 |
-| | Just right | 0 |
-| | Too much | −2 |
+| 1 | 20 × 9, 20 × 9, 20 × 8 | 20 × 10, 20 × 10, 20 × 9 |
+| 2 | 20 × 12, 20 × 11, 20 × 10 | **21 × 8**, 20 × 12, 20 × 11 |
 
-The modifier is the sum of all four scores (range −5 to +4).
+In session 2 the first set reached the ceiling (12) → it adds weight and resets to the floor (21 × 8), while sets 2 and 3 keep climbing reps at 20 kg. The sets are now on slightly different weights — each progressing on its own.
 
-### Progression rules
+### Feedback
 
-| Situation | What happens |
-|---|---|
-| Pain = High | Hold all targets unchanged |
-| Modifier ≤ −3 | **Deload** — weight −10%, reps reset to range minimum |
-| Heaviest set hit the rep ceiling | **Bump weight** by one increment; reps recalculated to preserve volume |
-| Missed target reps by more than 1 | Hold (no rep or weight change) |
-| Otherwise | +1 rep |
+While an exercise is in progress its card shows a progressive-overload hint — how this session's target compares to your last performance. Once logged, each set shows a **▲ / = / ▼** glyph for beat / met / missed versus its target.
 
-After the base decision, the modifier adjusts reps further (+1 per point above 0, −1 per point below). Positive signals are scaled by the **progression** setting (Slow ×0.5, Normal ×1.0, Fast ×1.5). If the modifier would push reps past the ceiling without a weight bump, the bump triggers automatically.
+### Bodyweight exercises
 
-Weight changes are applied **proportionally across all sets**, preserving pyramid and drop-set structure. Weights are rounded to the nearest 0.5 kg and capped at a 10% jump per session.
-
-### Worked examples (standard rep range 8–12, barbell bench, normal progression)
-
-| Scenario | Ratings | Modifier | Outcome |
-|---|---|---|---|
-| Crushed it — logged 12 reps, felt way too easy | Pain: none, Recovery: never sore, Pump: OK, Intensity: too easy | 0 + 1 + 0 + 2 = **+3** | Hit ceiling (12 reps) → weight +2.5 kg, reps recalculated to preserve volume; +3 modifier adds 3 more reps |
-| Solid session — logged 10 of 10 reps | Pain: none, Recovery: healed, Pump: OK, Intensity: just right | **0** | +1 rep (11 next session) |
-| Tough session — missed reps, still sore | Pain: low, Recovery: still sore, Pump: OK, Intensity: too much | −1 + −1 + 0 + −2 = **−4** | Modifier ≤ −3 → deload: weight −10%, reps reset to 8 |
-
-### Per-muscle-group settings
-
-| Setting | Options |
-|---|---|
-| **Rep range** | Powerlifting (5–8), Standard (8–12), Volume (12–15) |
-| **Progression** | Slow (×0.5 on positive signals), Normal (×1.0), Fast (×1.5) |
-| **Pause weight** | Blocks weight increases — only reps progress |
-
-Bodyweight exercises (pull-ups, dips, etc.) follow the same rep-progression logic but have no weight axis.
+Bodyweight exercises (pull-ups, dips, etc.) have no weight axis — reps simply climb toward the ceiling. Once every set reaches the ceiling, a set is added (up to six).
 
 ---
 
