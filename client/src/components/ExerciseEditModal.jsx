@@ -91,7 +91,7 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
 
         {slot && (
           <div>
-            <p style={label}>Sets</p>
+            <p style={label}>Default sets</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.35rem' }}>
               {[1,2,3,4,5,6].map(n => (
                 <button key={n} onClick={() => setSets(n)} style={{ ...chip(sets === n), padding: '0.55rem 0', textAlign: 'center' }}>{n}</button>
