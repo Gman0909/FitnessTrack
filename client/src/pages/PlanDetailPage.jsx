@@ -62,8 +62,26 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
   const [newIncr, setNewIncr]         = useState('2.5');
   const [setCount, setSetCount]       = useState(3);
   const [saving, setSaving]           = useState(false);
+  const [repMin, setRepMin]           = useState('');
+  const [repMax, setRepMax]           = useState('');
 
   useEffect(() => { api.getExercises({ user_equipment: true }).then(setExercises); }, []);
+
+  // Sync the rep-range editor to whichever exercise is selected.
+  useEffect(() => {
+    if (selected) { setRepMin(String(selected.rep_min)); setRepMax(String(selected.rep_max)); }
+  }, [selected]);
+
+  const rMin = parseInt(repMin, 10), rMax = parseInt(repMax, 10);
+  const rangeValid = Number.isInteger(rMin) && Number.isInteger(rMax) && rMin >= 1 && rMax > rMin;
+  const rangeDirty = selected && (rMin !== selected.rep_min || rMax !== selected.rep_max);
+
+  async function saveRange() {
+    if (!selected || !rangeValid || !rangeDirty) return;
+    await api.updateExercise(selected.id, { rep_min: rMin, rep_max: rMax });
+    setSelected(s => ({ ...s, rep_min: rMin, rep_max: rMax }));
+    setExercises(list => list.map(e => e.id === selected.id ? { ...e, rep_min: rMin, rep_max: rMax } : e));
+  }
 
   const muscleGroups   = [...new Set(exercises.map(e => e.muscle_group))].sort();
   const equipmentTypes = [...new Set(exercises.map(e => e.equipment))].sort();
@@ -208,12 +226,20 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
                   ))}
                 </div>
               </div>
-              {selected && (
-                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--dim)', lineHeight: 1.5 }}>
-                  Target rep range: {selected.rep_min}–{selected.rep_max}. You'll enter the
-                  weight on your first session; progression takes over from there.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Rep range</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input type="number" min="1" value={repMin} onChange={e => setRepMin(e.target.value)} onBlur={saveRange}
+                    style={{ ...inputStyle, width: '70px', borderColor: rangeValid ? 'var(--border)' : 'var(--danger)' }} />
+                  <span style={{ color: 'var(--dim)' }}>–</span>
+                  <input type="number" min="2" value={repMax} onChange={e => setRepMax(e.target.value)} onBlur={saveRange}
+                    style={{ ...inputStyle, width: '70px', borderColor: rangeValid ? 'var(--border)' : 'var(--danger)' }} />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--dim)' }}>reps · drives progression</span>
+                </div>
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--dim)', lineHeight: 1.5 }}>
+                  You'll enter the weight on your first session; double progression takes over from there.
                 </p>
-              )}
+              </div>
             </div>
             <button onClick={handleAdd} disabled={saving}
               style={{ marginTop: '0.25rem', padding: '0.95rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', opacity: saving ? 0.4 : 1, cursor: 'pointer', minHeight: '48px' }}>

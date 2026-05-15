@@ -12,12 +12,29 @@ function EditExerciseModal({ exercise, onSave, onClose }) {
   const [mg,    setMg]    = useState(exercise.muscle_group);
   const [equip, setEquip] = useState(exercise.equipment);
   const [incr,  setIncr]  = useState(String(exercise.default_increment));
+  const [repMin, setRepMin] = useState(String(exercise.rep_min ?? 8));
+  const [repMax, setRepMax] = useState(String(exercise.rep_max ?? 12));
   const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState(null);
+
+  const mn = parseInt(repMin, 10), mx = parseInt(repMax, 10);
+  const rangeValid = Number.isInteger(mn) && Number.isInteger(mx) && mn >= 1 && mx > mn;
 
   async function handleSave() {
+    if (!rangeValid) { setError('Rep max must be a whole number above rep min.'); return; }
     setSaving(true);
-    await api.updateExercise(exercise.id, { name: name.trim(), muscle_group: mg, equipment: equip, default_increment: parseFloat(incr) || 2.5 });
-    onSave({ ...exercise, name: name.trim(), muscle_group: mg, equipment: equip, default_increment: parseFloat(incr) });
+    setError(null);
+    try {
+      await api.updateExercise(exercise.id, {
+        name: name.trim(), muscle_group: mg, equipment: equip,
+        default_increment: parseFloat(incr) || 2.5, rep_min: mn, rep_max: mx,
+      });
+    } catch {
+      setSaving(false);
+      setError('Could not save. Try again.');
+      return;
+    }
+    onSave({ ...exercise, name: name.trim(), muscle_group: mg, equipment: equip, default_increment: parseFloat(incr), rep_min: mn, rep_max: mx });
   }
 
   const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' };
@@ -61,9 +78,19 @@ function EditExerciseModal({ exercise, onSave, onClose }) {
           <label style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>Increment (kg)</label>
           <input type="number" min="0" step="0.5" value={incr} onChange={e => setIncr(e.target.value)} style={{ ...inp, width: '90px' }} />
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>Rep range</label>
+          <input type="number" min="1" value={repMin} onChange={e => setRepMin(e.target.value)}
+            style={{ ...inp, width: '64px', borderColor: rangeValid ? 'var(--border)' : 'var(--danger)' }} />
+          <span style={{ color: 'var(--dim)' }}>–</span>
+          <input type="number" min="2" value={repMax} onChange={e => setRepMax(e.target.value)}
+            style={{ ...inp, width: '64px', borderColor: rangeValid ? 'var(--border)' : 'var(--danger)' }} />
+          <span style={{ fontSize: '0.78rem', color: 'var(--dim)' }}>reps</span>
+        </div>
+        {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button onClick={onClose} style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--text)', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving || !name.trim()} style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '700', fontSize: '0.95rem', opacity: !name.trim() ? 0.4 : 1, cursor: 'pointer' }}>
+          <button onClick={handleSave} disabled={saving || !name.trim() || !rangeValid} style={{ flex: 1, padding: '0.85rem', minHeight: '48px', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '700', fontSize: '0.95rem', opacity: (!name.trim() || !rangeValid) ? 0.4 : 1, cursor: 'pointer' }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
