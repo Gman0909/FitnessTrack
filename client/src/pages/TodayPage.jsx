@@ -545,6 +545,9 @@ function ExerciseHistoryModal({ exercise, onClose }) {
     fontSize:'0.8rem', fontWeight: active ? '700' : '500', cursor:'pointer',
   });
   const valueOf = d => metric === 'volume' ? d.volume : d.max_weight;
+  // Volume is a sum of weight×reps products — round to 0.1 before display so
+  // floating-point noise (e.g. 4321.8000000000002) doesn't leak through.
+  const round1  = n => Math.round(n * 10) / 10;
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -569,8 +572,8 @@ function ExerciseHistoryModal({ exercise, onClose }) {
             <HistoryChart data={history} metric={metric} />
             <div style={{ display:'flex', gap:'1.5rem', fontSize:'0.8rem', color:'var(--muted)' }}>
               <span>{history.length} session{history.length !== 1 ? 's' : ''}</span>
-              <span>Peak: {display(Math.max(...history.map(valueOf)))}</span>
-              <span>Latest: {display(valueOf(history.at(-1)))}</span>
+              <span>Peak: {display(round1(Math.max(...history.map(valueOf))))}</span>
+              <span>Latest: {display(round1(valueOf(history.at(-1))))}</span>
             </div>
           </>
         )}
