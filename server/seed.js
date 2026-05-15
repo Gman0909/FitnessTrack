@@ -13,7 +13,7 @@ const exercises = [
   { name: 'Cable Fly',                      muscle_group: 'chest',     equipment: 'cable',      default_increment: 2.5 },
   { name: 'Pec Deck',                       muscle_group: 'chest',     equipment: 'machine',    default_increment: 5   },
   { name: 'Push-up',                        muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Dip',                            muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0   },
+  { name: 'Dips (Chest)',                   muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0   },
   // Back
   { name: 'Deadlift',                       muscle_group: 'back',      equipment: 'barbell',    default_increment: 5   },
   { name: 'Barbell Row',                    muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5 },
@@ -53,7 +53,7 @@ const exercises = [
   { name: 'Close-grip Bench Press',         muscle_group: 'triceps',   equipment: 'barbell',    default_increment: 2.5 },
   { name: 'Overhead Tricep Extension',      muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1   },
   { name: 'Tricep Kickback',                muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Dips',                           muscle_group: 'triceps',   equipment: 'bodyweight', default_increment: 0   },
+  { name: 'Dips (Triceps)',                 muscle_group: 'triceps',   equipment: 'bodyweight', default_increment: 0   },
   { name: 'Weighted Dips',                  muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 2.5 },
   { name: 'Tricep Pushdown',                muscle_group: 'triceps',   equipment: 'cable',      default_increment: 2.5 },
   { name: 'Cable Overhead Extension',       muscle_group: 'triceps',   equipment: 'cable',      default_increment: 2.5 },
