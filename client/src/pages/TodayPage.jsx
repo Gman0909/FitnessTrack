@@ -463,16 +463,17 @@ function HistoryIcon() {
 
 // ── History chart ──────────────────────────────────────────────────────────────
 
-function HistoryChart({ data }) {
+function HistoryChart({ data, metric }) {
   const { unit } = useUnit();
   const toDisp = kg => unit === 'lbs' ? Math.round(kg * 2.2046 * 10) / 10 : kg;
+  const valueOf = d => metric === 'volume' ? d.volume : d.max_weight;
 
   const W = 500, H = 180;
   const pad = { top: 14, right: 16, bottom: 34, left: 46 };
   const cW  = W - pad.left - pad.right;
   const cH  = H - pad.top  - pad.bottom;
 
-  const vals = data.map(d => toDisp(d.max_weight));
+  const vals = data.map(d => toDisp(valueOf(d)));
   const lo   = Math.min(...vals), hi = Math.max(...vals);
   const span = hi - lo || 1;
   const yLo  = lo - span * 0.18, yHi = hi + span * 0.18;
@@ -483,7 +484,10 @@ function HistoryChart({ data }) {
   const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
   const area = `${line}L${pts.at(-1)[0].toFixed(1)},${(pad.top + cH).toFixed(1)}L${pts[0][0].toFixed(1)},${(pad.top + cH).toFixed(1)}Z`;
 
-  const yTicks = [lo, (lo + hi) / 2, hi].map(v => Math.round(toDisp(v) * 2) / 2);
+  // lo/hi are already in display units — round for tick labels (whole numbers
+  // for volume, nearest 0.5 for weight).
+  const yTicks = [lo, (lo + hi) / 2, hi].map(v =>
+    metric === 'volume' ? Math.round(v) : Math.round(v * 2) / 2);
 
   const nLabels = Math.min(data.length, 5);
   const xIdxs  = Array.from({ length: nLabels }, (_, k) =>
@@ -508,7 +512,7 @@ function HistoryChart({ data }) {
         <text key={i} x={pad.left - 6} y={yOf(v) + 4} textAnchor="end" fontSize="11" fill="var(--dim)">{v}</text>
       ))}
       <text x={8} y={pad.top + cH / 2} textAnchor="middle" fontSize="10" fill="var(--dim)"
-        transform={`rotate(-90,8,${pad.top + cH / 2})`}>{unit}</text>
+        transform={`rotate(-90,8,${pad.top + cH / 2})`}>{metric === 'volume' ? `${unit}·reps` : unit}</text>
       {xIdxs.map((idx, k) => (
         <text key={k} x={xOf(idx)} y={H - 4} textAnchor="middle" fontSize="11" fill="var(--dim)">
           {shortDate(data[idx].date)}
@@ -523,6 +527,7 @@ function HistoryChart({ data }) {
 function ExerciseHistoryModal({ exercise, onClose }) {
   const { display } = useUnit();
   const [history, setHistory] = useState(null);
+  const [metric, setMetric]   = useState('volume');
 
   useEffect(() => {
     api.getExerciseHistory(exercise.exercise_id).then(setHistory);
@@ -530,6 +535,14 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
   const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
   const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'560px', display:'flex', flexDirection:'column', gap:'1rem', border:'1px solid var(--border)' };
+  const tab     = active => ({
+    flex:1, padding:'0.45rem 0', minHeight:'34px',
+    border:`1px solid ${active ? 'var(--btn)' : 'var(--border)'}`, borderRadius:'7px',
+    background: active ? 'var(--btn)' : 'var(--surface)',
+    color: active ? 'var(--btn-text)' : 'var(--text)',
+    fontSize:'0.8rem', fontWeight: active ? '700' : '500', cursor:'pointer',
+  });
+  const valueOf = d => metric === 'volume' ? d.volume : d.max_weight;
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -547,11 +560,15 @@ function ExerciseHistoryModal({ exercise, onClose }) {
         {history?.length === 0 && <p style={{ color:'var(--muted)', margin:0 }}>No sessions logged yet.</p>}
         {history?.length > 0 && (
           <>
-            <HistoryChart data={history} />
+            <div style={{ display:'flex', gap:'0.4rem' }}>
+              <button type="button" onClick={() => setMetric('volume')} style={tab(metric === 'volume')}>Volume</button>
+              <button type="button" onClick={() => setMetric('weight')} style={tab(metric === 'weight')}>Top weight</button>
+            </div>
+            <HistoryChart data={history} metric={metric} />
             <div style={{ display:'flex', gap:'1.5rem', fontSize:'0.8rem', color:'var(--muted)' }}>
               <span>{history.length} session{history.length !== 1 ? 's' : ''}</span>
-              <span>Peak: {display(Math.max(...history.map(d => d.max_weight)))}</span>
-              <span>Latest: {display(history.at(-1).max_weight)}</span>
+              <span>Peak: {display(Math.max(...history.map(valueOf)))}</span>
+              <span>Latest: {display(valueOf(history.at(-1)))}</span>
             </div>
           </>
         )}
