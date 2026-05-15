@@ -120,7 +120,7 @@ const SAMPLE_SLOTS = [
   { day: 3, name: 'Sissy Squat',                sets: 3, weight: null },
   // Friday (4)
   { day: 4, name: 'Spider Curl',                sets: 3, weight: 18,   reps: 8 },
-  { day: 4, name: 'Dip',                        sets: 2, weight: null },
+  { day: 4, name: 'Dips (Triceps)',             sets: 2, weight: null },
   { day: 4, name: 'Incline Curl',               sets: 3, weight: 23,   reps: 8 },
   { day: 4, name: 'Hip Thrust',                 sets: 2, weight: 28,   reps: 8 },
   { day: 4, name: 'Incline Y Raises',           sets: 3, weight: 12.5, reps: 8 },
