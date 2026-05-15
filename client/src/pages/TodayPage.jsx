@@ -403,8 +403,10 @@ function SetRow({
   const lockedStyle  = isLogged ? { ...inputStyle, cursor: 'not-allowed' } : inputStyle;
 
   // Actual-vs-target glyph: how the logged reps compared to the set's target.
+  // Suppressed on first-time sets — with no prior logged performance the
+  // "target" is just the rep-range floor, so beat/met/missed is meaningless.
   const loggedReps = parseInt(reps, 10);
-  const perf = isLogged && Number.isFinite(loggedReps) && set.reps != null
+  const perf = isLogged && Number.isFinite(loggedReps) && set.reps != null && set.prev_reps != null
     ? (loggedReps > set.reps ? 'up' : loggedReps === set.reps ? 'met' : 'down')
     : null;
   const perfGlyph = { up: '▲', met: '=', down: '▼' };
