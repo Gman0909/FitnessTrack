@@ -1,94 +1,98 @@
 import { fileURLToPath } from 'url';
 import db from './db.js';
 
+// rep_min / rep_max: per-exercise rep range for double progression. Assigned by
+// movement category — heavy barbell compounds run low (more weight, fewer reps),
+// isolation runs mid, small single-joint raises run high (the wide gap absorbs
+// the large %-jumps a light dumbbell forces). Editable per exercise afterwards.
 const exercises = [
   // Chest
-  { name: 'Bench Press',                    muscle_group: 'chest',     equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Incline Bench Press',            muscle_group: 'chest',     equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Decline Bench Press',            muscle_group: 'chest',     equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Dumbbell Bench Press',           muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Incline Dumbbell Press',         muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Dumbbell Fly',                   muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Incline Dumbbell Fly',           muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Cable Fly',                      muscle_group: 'chest',     equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Pec Deck',                       muscle_group: 'chest',     equipment: 'machine',    default_increment: 5   },
-  { name: 'Push-up',                        muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Dips (Chest)',                   muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0   },
+  { name: 'Bench Press',                    muscle_group: 'chest',     equipment: 'barbell',    default_increment: 2.5, rep_min: 6,  rep_max: 8  },
+  { name: 'Incline Bench Press',            muscle_group: 'chest',     equipment: 'barbell',    default_increment: 2.5, rep_min: 6,  rep_max: 8  },
+  { name: 'Decline Bench Press',            muscle_group: 'chest',     equipment: 'barbell',    default_increment: 2.5, rep_min: 6,  rep_max: 8  },
+  { name: 'Dumbbell Bench Press',           muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 10 },
+  { name: 'Incline Dumbbell Press',         muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 10 },
+  { name: 'Dumbbell Fly',                   muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Incline Dumbbell Fly',           muscle_group: 'chest',     equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Cable Fly',                      muscle_group: 'chest',     equipment: 'cable',      default_increment: 2.5, rep_min: 10, rep_max: 15 },
+  { name: 'Pec Deck',                       muscle_group: 'chest',     equipment: 'machine',    default_increment: 5,   rep_min: 10, rep_max: 15 },
+  { name: 'Push-up',                        muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0,   rep_min: 12, rep_max: 20 },
+  { name: 'Dips (Chest)',                   muscle_group: 'chest',     equipment: 'bodyweight', default_increment: 0,   rep_min: 8,  rep_max: 15 },
   // Back
-  { name: 'Deadlift',                       muscle_group: 'back',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Barbell Row',                    muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'T-bar Row',                      muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Rack Pull',                      muscle_group: 'back',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Meadows Row',                    muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Dumbbell Row',                   muscle_group: 'back',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Lat Pulldown',                   muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Seated Cable Row',               muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Single-arm Cable Row',           muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Face Pull',                      muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Pull-up',                        muscle_group: 'back',      equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Chin-up',                        muscle_group: 'back',      equipment: 'bodyweight', default_increment: 0   },
+  { name: 'Deadlift',                       muscle_group: 'back',      equipment: 'barbell',    default_increment: 5,   rep_min: 4,  rep_max: 6  },
+  { name: 'Barbell Row',                    muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5, rep_min: 8,  rep_max: 10 },
+  { name: 'T-bar Row',                      muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5, rep_min: 8,  rep_max: 10 },
+  { name: 'Rack Pull',                      muscle_group: 'back',      equipment: 'barbell',    default_increment: 5,   rep_min: 4,  rep_max: 6  },
+  { name: 'Meadows Row',                    muscle_group: 'back',      equipment: 'barbell',    default_increment: 2.5, rep_min: 8,  rep_max: 12 },
+  { name: 'Dumbbell Row',                   muscle_group: 'back',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Lat Pulldown',                   muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5, rep_min: 8,  rep_max: 12 },
+  { name: 'Seated Cable Row',               muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5, rep_min: 8,  rep_max: 12 },
+  { name: 'Single-arm Cable Row',           muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5, rep_min: 10, rep_max: 15 },
+  { name: 'Face Pull',                      muscle_group: 'back',      equipment: 'cable',      default_increment: 2.5, rep_min: 12, rep_max: 20 },
+  { name: 'Pull-up',                        muscle_group: 'back',      equipment: 'bodyweight', default_increment: 0,   rep_min: 5,  rep_max: 12 },
+  { name: 'Chin-up',                        muscle_group: 'back',      equipment: 'bodyweight', default_increment: 0,   rep_min: 5,  rep_max: 12 },
   // Shoulders
-  { name: 'Overhead Press',                 muscle_group: 'shoulders', equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Upright Row',                    muscle_group: 'shoulders', equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Dumbbell Shoulder Press',        muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Arnold Press',                   muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Lateral Raise',                  muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Front Raise',                    muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Rear Delt Fly',                  muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Incline Dumbbell Reverse Fly',   muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Incline Y Raises',               muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Cable Lateral Raise',            muscle_group: 'shoulders', equipment: 'cable',      default_increment: 2.5 },
+  { name: 'Overhead Press',                 muscle_group: 'shoulders', equipment: 'barbell',    default_increment: 2.5, rep_min: 5,  rep_max: 8  },
+  { name: 'Upright Row',                    muscle_group: 'shoulders', equipment: 'barbell',    default_increment: 2.5, rep_min: 10, rep_max: 15 },
+  { name: 'Dumbbell Shoulder Press',        muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 10 },
+  { name: 'Arnold Press',                   muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 10 },
+  { name: 'Lateral Raise',                  muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Front Raise',                    muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Rear Delt Fly',                  muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Incline Dumbbell Reverse Fly',   muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Incline Y Raises',               muscle_group: 'shoulders', equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Cable Lateral Raise',            muscle_group: 'shoulders', equipment: 'cable',      default_increment: 2.5, rep_min: 12, rep_max: 20 },
   // Biceps
-  { name: 'Barbell Curl',                   muscle_group: 'biceps',    equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Preacher Curl',                  muscle_group: 'biceps',    equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Dumbbell Curl',                  muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Hammer Curl',                    muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Concentration Curl',             muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Alternating Curl',               muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Spider Curl',                    muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Cable Curl',                     muscle_group: 'biceps',    equipment: 'cable',      default_increment: 2.5 },
+  { name: 'Barbell Curl',                   muscle_group: 'biceps',    equipment: 'barbell',    default_increment: 2.5, rep_min: 8,  rep_max: 12 },
+  { name: 'Preacher Curl',                  muscle_group: 'biceps',    equipment: 'barbell',    default_increment: 2.5, rep_min: 8,  rep_max: 12 },
+  { name: 'Dumbbell Curl',                  muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Hammer Curl',                    muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Concentration Curl',             muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1,   rep_min: 10, rep_max: 15 },
+  { name: 'Alternating Curl',               muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Spider Curl',                    muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1,   rep_min: 10, rep_max: 15 },
+  { name: 'Cable Curl',                     muscle_group: 'biceps',    equipment: 'cable',      default_increment: 2.5, rep_min: 10, rep_max: 15 },
   // Triceps
-  { name: 'Skull Crusher',                  muscle_group: 'triceps',   equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Skull Crushers',                 muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Close-grip Bench Press',         muscle_group: 'triceps',   equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Overhead Tricep Extension',      muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Tricep Kickback',                muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Dips (Triceps)',                 muscle_group: 'triceps',   equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Weighted Dips',                  muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 2.5 },
-  { name: 'Tricep Pushdown',                muscle_group: 'triceps',   equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Cable Overhead Extension',       muscle_group: 'triceps',   equipment: 'cable',      default_increment: 2.5 },
+  { name: 'Skull Crusher',                  muscle_group: 'triceps',   equipment: 'barbell',    default_increment: 2.5, rep_min: 8,  rep_max: 12 },
+  { name: 'Skull Crushers',                 muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Close-grip Bench Press',         muscle_group: 'triceps',   equipment: 'barbell',    default_increment: 2.5, rep_min: 6,  rep_max: 10 },
+  { name: 'Overhead Tricep Extension',      muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1,   rep_min: 10, rep_max: 15 },
+  { name: 'Tricep Kickback',                muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Dips (Triceps)',                 muscle_group: 'triceps',   equipment: 'bodyweight', default_increment: 0,   rep_min: 8,  rep_max: 15 },
+  { name: 'Weighted Dips',                  muscle_group: 'triceps',   equipment: 'dumbbell',   default_increment: 2.5, rep_min: 6,  rep_max: 10 },
+  { name: 'Tricep Pushdown',                muscle_group: 'triceps',   equipment: 'cable',      default_increment: 2.5, rep_min: 10, rep_max: 15 },
+  { name: 'Cable Overhead Extension',       muscle_group: 'triceps',   equipment: 'cable',      default_increment: 2.5, rep_min: 10, rep_max: 15 },
   // Legs
-  { name: 'Squat',                          muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Front Squat',                    muscle_group: 'legs',      equipment: 'barbell',    default_increment: 2.5 },
-  { name: 'Romanian Deadlift',              muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Sumo Deadlift',                  muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Hip Thrust',                     muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Stiff Legged Deadlift',          muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5   },
-  { name: 'Dumbbell Hip Thrust',            muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Dumbbell Stiff Legged Deadlift', muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Bulgarian Split Squat',          muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Lunges',                         muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Step-up',                        muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Leg Press',                      muscle_group: 'legs',      equipment: 'machine',    default_increment: 10  },
-  { name: 'Hack Squat',                     muscle_group: 'legs',      equipment: 'machine',    default_increment: 5   },
-  { name: 'Leg Curl',                       muscle_group: 'legs',      equipment: 'machine',    default_increment: 5   },
-  { name: 'Leg Extension',                  muscle_group: 'legs',      equipment: 'machine',    default_increment: 5   },
-  { name: 'Calf Raise',                     muscle_group: 'legs',      equipment: 'machine',    default_increment: 5   },
-  { name: 'Sissy Squat',                    muscle_group: 'legs',      equipment: 'bodyweight', default_increment: 0   },
+  { name: 'Squat',                          muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5,   rep_min: 5,  rep_max: 8  },
+  { name: 'Front Squat',                    muscle_group: 'legs',      equipment: 'barbell',    default_increment: 2.5, rep_min: 5,  rep_max: 8  },
+  { name: 'Romanian Deadlift',              muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5,   rep_min: 6,  rep_max: 10 },
+  { name: 'Sumo Deadlift',                  muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5,   rep_min: 4,  rep_max: 6  },
+  { name: 'Hip Thrust',                     muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5,   rep_min: 8,  rep_max: 12 },
+  { name: 'Stiff Legged Deadlift',          muscle_group: 'legs',      equipment: 'barbell',    default_increment: 5,   rep_min: 6,  rep_max: 10 },
+  { name: 'Dumbbell Hip Thrust',            muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 10, rep_max: 15 },
+  { name: 'Dumbbell Stiff Legged Deadlift', muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Bulgarian Split Squat',          muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Lunges',                         muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Step-up',                        muscle_group: 'legs',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
+  { name: 'Leg Press',                      muscle_group: 'legs',      equipment: 'machine',    default_increment: 10,  rep_min: 8,  rep_max: 12 },
+  { name: 'Hack Squat',                     muscle_group: 'legs',      equipment: 'machine',    default_increment: 5,   rep_min: 8,  rep_max: 12 },
+  { name: 'Leg Curl',                       muscle_group: 'legs',      equipment: 'machine',    default_increment: 5,   rep_min: 10, rep_max: 15 },
+  { name: 'Leg Extension',                  muscle_group: 'legs',      equipment: 'machine',    default_increment: 5,   rep_min: 10, rep_max: 15 },
+  { name: 'Calf Raise',                     muscle_group: 'legs',      equipment: 'machine',    default_increment: 5,   rep_min: 12, rep_max: 20 },
+  { name: 'Sissy Squat',                    muscle_group: 'legs',      equipment: 'bodyweight', default_increment: 0,   rep_min: 12, rep_max: 20 },
   // Core
-  { name: 'Plank',                          muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Crunch',                         muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Hanging Leg Raise',              muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0   },
-  { name: 'Cable Crunch',                   muscle_group: 'core',      equipment: 'cable',      default_increment: 2.5 },
-  { name: 'Ab Wheel Rollout',               muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0   },
+  { name: 'Plank',                          muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0,   rep_min: 12, rep_max: 20 },
+  { name: 'Crunch',                         muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0,   rep_min: 12, rep_max: 20 },
+  { name: 'Hanging Leg Raise',              muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0,   rep_min: 10, rep_max: 20 },
+  { name: 'Cable Crunch',                   muscle_group: 'core',      equipment: 'cable',      default_increment: 2.5, rep_min: 12, rep_max: 20 },
+  { name: 'Ab Wheel Rollout',               muscle_group: 'core',      equipment: 'bodyweight', default_increment: 0,   rep_min: 8,  rep_max: 15 },
   // Additional
-  { name: 'Reverse Fly',                    muscle_group: 'back',      equipment: 'dumbbell',   default_increment: 1   },
-  { name: 'Incline Curl',                   muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1   },
+  { name: 'Reverse Fly',                    muscle_group: 'back',      equipment: 'dumbbell',   default_increment: 1,   rep_min: 12, rep_max: 20 },
+  { name: 'Incline Curl',                   muscle_group: 'biceps',    equipment: 'dumbbell',   default_increment: 1,   rep_min: 8,  rep_max: 12 },
 ];
 
 const insert = db.prepare(`
-  INSERT OR IGNORE INTO exercises (name, muscle_group, equipment, default_increment)
-  VALUES (@name, @muscle_group, @equipment, @default_increment)
+  INSERT OR IGNORE INTO exercises (name, muscle_group, equipment, default_increment, rep_min, rep_max)
+  VALUES (@name, @muscle_group, @equipment, @default_increment, @rep_min, @rep_max)
 `);
 
 export function seed() {
@@ -96,6 +100,15 @@ export function seed() {
   // Migrate existing dumbbell exercises that still have the old 2 kg default
   db.prepare(`UPDATE exercises SET default_increment = 1
     WHERE equipment = 'dumbbell' AND default_increment = 2 AND is_custom = 0`).run();
+  // Sync researched rep ranges onto already-existing library rows — INSERT OR
+  // IGNORE above leaves existing rows untouched, so rep_min/rep_max need a
+  // separate pass to land on databases created before the columns existed.
+  const syncRange = db.prepare(
+    'UPDATE exercises SET rep_min = ?, rep_max = ? WHERE name = ? AND is_custom = 0'
+  );
+  db.transaction(() => {
+    for (const ex of exercises) syncRange.run(ex.rep_min, ex.rep_max, ex.name);
+  })();
   seedSamplePlan();
 }
 

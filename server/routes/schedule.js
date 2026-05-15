@@ -29,7 +29,8 @@ router.get('/today', (req, res) => {
 
   const slots = db.prepare(`
     SELECT s.id as schedule_id, s.set_count, s.position, s.plan_id,
-           e.id as exercise_id, e.name, e.muscle_group, e.equipment, e.default_increment
+           e.id as exercise_id, e.name, e.muscle_group, e.equipment, e.default_increment,
+           e.rep_min, e.rep_max
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     WHERE s.day_of_week = ? AND s.plan_id = ?
       AND EXISTS (SELECT 1 FROM plan_days pd WHERE pd.plan_id = s.plan_id AND pd.day_of_week = s.day_of_week)
@@ -100,8 +101,10 @@ router.get('/today', (req, res) => {
         : null;
       return {
         set_num:     setNum,
-        weight:      target?.weight ?? 20,
-        reps:        target?.reps   ?? 8,
+        // New exercises have no target yet — start with an empty weight and
+        // reps at the floor of the exercise's rep range.
+        weight:      target?.weight ?? null,
+        reps:        target?.reps   ?? slot.rep_min,
         prev_weight: prev?.weight   ?? null,
         prev_reps:   prev?.reps     ?? null,
       };

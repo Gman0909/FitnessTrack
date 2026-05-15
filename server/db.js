@@ -233,6 +233,14 @@ if (!cols('sessions').includes('unlocked'))
 if (!cols('set_targets').includes('is_suggestion'))
   db.exec('ALTER TABLE set_targets ADD COLUMN is_suggestion INTEGER NOT NULL DEFAULT 0');
 
+// Per-exercise rep range for double-progression. Seeded by exercise type;
+// editable per exercise. Default 8–12 (isolation) until the seed syncs the
+// researched range onto each row.
+if (!cols('exercises').includes('rep_min'))
+  db.exec('ALTER TABLE exercises ADD COLUMN rep_min INTEGER NOT NULL DEFAULT 8');
+if (!cols('exercises').includes('rep_max'))
+  db.exec('ALTER TABLE exercises ADD COLUMN rep_max INTEGER NOT NULL DEFAULT 12');
+
 // Clear stale dates on currently-blank, never-finalized sessions. Earlier
 // versions stamped session.date at slot-creation time (when the user merely
 // navigated to the slot). The new rule is: blank sessions have NULL date and

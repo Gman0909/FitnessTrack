@@ -23,20 +23,35 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { name, muscle_group, equipment, default_increment = 2.5 } = req.body;
+  const { name, muscle_group, equipment, default_increment = 2.5, rep_min = 8, rep_max = 12 } = req.body;
+  if (!(rep_min >= 1 && rep_max > rep_min))
+    return res.status(400).json({ error: 'rep_max must be greater than rep_min (>= 1)' });
   const result = db.prepare(
-    'INSERT INTO exercises (name, muscle_group, equipment, default_increment, is_custom) VALUES (?, ?, ?, ?, 1)'
-  ).run(name, muscle_group, equipment, default_increment);
-  res.status(201).json({ id: result.lastInsertRowid, name, muscle_group, equipment, default_increment, is_custom: 1 });
+    'INSERT INTO exercises (name, muscle_group, equipment, default_increment, is_custom, rep_min, rep_max) VALUES (?, ?, ?, ?, 1, ?, ?)'
+  ).run(name, muscle_group, equipment, default_increment, rep_min, rep_max);
+  res.status(201).json({ id: result.lastInsertRowid, name, muscle_group, equipment, default_increment, rep_min, rep_max, is_custom: 1 });
 });
 
 router.patch('/:id', (req, res) => {
-  const { name, muscle_group, equipment, default_increment } = req.body;
+  const { name, muscle_group, equipment, default_increment, rep_min, rep_max } = req.body;
+  const cur = db.prepare('SELECT rep_min, rep_max FROM exercises WHERE id = ?').get(req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Not found' });
+
+  // Validate the resulting rep range whenever either bound is touched.
+  if (rep_min !== undefined || rep_max !== undefined) {
+    const newMin = rep_min ?? cur.rep_min;
+    const newMax = rep_max ?? cur.rep_max;
+    if (!(Number.isInteger(newMin) && Number.isInteger(newMax) && newMin >= 1 && newMax > newMin))
+      return res.status(400).json({ error: 'rep_max must be a whole number greater than rep_min (>= 1)' });
+  }
+
   const fields = [], vals = [];
   if (name              !== undefined) { fields.push('name = ?');              vals.push(name); }
   if (muscle_group      !== undefined) { fields.push('muscle_group = ?');      vals.push(muscle_group); }
   if (equipment         !== undefined) { fields.push('equipment = ?');         vals.push(equipment); }
   if (default_increment !== undefined) { fields.push('default_increment = ?'); vals.push(default_increment); }
+  if (rep_min           !== undefined) { fields.push('rep_min = ?');           vals.push(rep_min); }
+  if (rep_max           !== undefined) { fields.push('rep_max = ?');           vals.push(rep_max); }
   if (!fields.length) return res.json({ ok: true });
   vals.push(req.params.id);
   db.prepare(`UPDATE exercises SET ${fields.join(', ')} WHERE id = ?`).run(...vals);

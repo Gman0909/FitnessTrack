@@ -1,11 +1,112 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { nextExerciseTargets, computeCheckinModifier } from '../../shared/algorithm.js';
+import { nextExerciseTargets } from '../../shared/algorithm.js';
 import { slotDone } from '../../shared/slotDone.js';
 
 const router = Router();
 
 const todayStr = () => new Date().toISOString().split('T')[0];
+
+const addDay = dateStr => {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split('T')[0];
+};
+
+// ── Double-progression recompute ──────────────────────────────────────────────
+// Re-derives one exercise's next-session targets from how the user actually
+// performed this session. Runs whenever the exercise's logged sets change.
+//   - Exercise complete (every scheduled set logged or skipped) → write the
+//     next-session per-set targets at valid_from = session.date + 1.
+//   - Not complete → remove any targets a prior completion produced.
+// Pure performance-based: no check-ins, no subjective modifiers.
+function recomputeExercise(session, exerciseId) {
+  const planId = session.plan_id ?? null;
+  const sched = db.prepare(`
+    SELECT s.set_count, e.equipment, e.default_increment, e.rep_min, e.rep_max
+    FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    WHERE s.plan_id IS ? AND s.day_of_week = ? AND s.exercise_id = ?
+  `).get(planId, session.session_dow, exerciseId);
+  if (!sched) return;
+
+  const sessionDateStr = session.date ?? todayStr();
+  const nextDayStr = addDay(sessionDateStr);
+
+  const logged = db.prepare(
+    'SELECT set_num, weight_used, reps_done, skipped FROM logged_sets WHERE session_id = ? AND exercise_id = ?'
+  ).all(session.id, exerciseId);
+  const loggedBySet = new Map(logged.map(l => [l.set_num, l]));
+
+  // Drop this exercise's previously-written next targets; rewrite below only
+  // if the exercise is (still) complete. Keeps re-logging idempotent.
+  db.prepare(
+    'DELETE FROM set_targets WHERE exercise_id = ? AND plan_id IS ? AND valid_from = ? AND is_suggestion = 0'
+  ).run(exerciseId, planId, nextDayStr);
+
+  let complete = true;
+  for (let i = 1; i <= sched.set_count; i++) {
+    const l = loggedBySet.get(i);
+    if (!l || (!l.skipped && l.reps_done == null)) { complete = false; break; }
+  }
+  if (!complete) return;
+
+  // Expected target = most recent target valid as of the session date
+  // (algorithm rows preferred over the initial suggestion).
+  const getExpected = db.prepare(`
+    SELECT weight, reps FROM set_targets
+    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= ?
+    ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
+  `);
+  const setData = [];
+  for (let i = 1; i <= sched.set_count; i++) {
+    const exp = getExpected.get(exerciseId, i, planId, sessionDateStr);
+    setData.push({
+      set_num: i,
+      target:  exp ?? { weight: null, reps: sched.rep_min },
+      logged:  loggedBySet.get(i),
+    });
+  }
+
+  const nextTargets = nextExerciseTargets(setData, {
+    repMin: sched.rep_min, repMax: sched.rep_max,
+    increment: sched.default_increment ?? 2.5, equipment: sched.equipment,
+  });
+
+  const writeTarget = db.prepare(
+    'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id, is_suggestion) VALUES (?, ?, ?, ?, ?, ?, 0)'
+  );
+  for (const t of nextTargets) {
+    writeTarget.run(exerciseId, t.set_num, t.weight ?? 0, t.reps, nextDayStr, planId);
+  }
+
+  // Bodyweight double progression: when every set reached the rep ceiling,
+  // add a set (cap 6) — the weight axis is unavailable, so volume grows by sets.
+  if (sched.equipment === 'bodyweight' && sched.set_count < 6) {
+    const allAtCeiling = setData.every(s =>
+      s.logged && !s.logged.skipped && s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max
+    );
+    if (allAtCeiling) {
+      db.prepare('UPDATE schedule SET set_count = set_count + 1 WHERE plan_id IS ? AND day_of_week = ? AND exercise_id = ?')
+        .run(planId, session.session_dow, exerciseId);
+      writeTarget.run(exerciseId, sched.set_count + 1, 0, sched.rep_min, nextDayStr, planId);
+    }
+  }
+}
+
+// Mark the session complete when the whole day's schedule is logged/skipped.
+function updateCompletion(session) {
+  const planId = session.plan_id ?? null;
+  const expected = db.prepare(
+    'SELECT COALESCE(SUM(set_count), 0) AS n FROM schedule WHERE plan_id IS ? AND day_of_week = ?'
+  ).get(planId, session.session_dow).n;
+  const done = db.prepare(
+    'SELECT COUNT(*) AS n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
+  ).get(session.id).n;
+  if (expected > 0 && done >= expected)
+    db.prepare('UPDATE sessions SET checked_in = 1, unlocked = 0 WHERE id = ?').run(session.id);
+  else
+    db.prepare('UPDATE sessions SET checked_in = 0 WHERE id = ?').run(session.id);
+}
 
 // ── Slot endpoint — position-based session access ─────────────────────────────
 // Returns { session, is_current, is_locked } for (plan_id, week_num, session_dow).
@@ -140,226 +241,69 @@ router.get('/:id/sets', (req, res) => {
 });
 
 router.post('/:id/sets', (req, res) => {
-  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
 
   const { exercise_id, set_num, reps_done, skipped = 0, weight_used } = req.body;
 
-  const existing = db.prepare(
-    'SELECT id FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ?'
-  ).get(req.params.id, exercise_id, set_num);
+  const rowId = db.transaction(() => {
+    const existing = db.prepare(
+      'SELECT id FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ?'
+    ).get(session.id, exercise_id, set_num);
 
-  if (existing) {
-    db.prepare(
-      'UPDATE logged_sets SET reps_done = ?, skipped = ?, weight_used = ? WHERE id = ?'
-    ).run(reps_done ?? null, skipped ? 1 : 0, weight_used ?? null, existing.id);
-    return res.json({ id: existing.id });
-  }
+    let id;
+    if (existing) {
+      db.prepare('UPDATE logged_sets SET reps_done = ?, skipped = ?, weight_used = ? WHERE id = ?')
+        .run(reps_done ?? null, skipped ? 1 : 0, weight_used ?? null, existing.id);
+      id = existing.id;
+    } else {
+      id = db.prepare(
+        'INSERT INTO logged_sets (session_id, exercise_id, set_num, reps_done, skipped, weight_used) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(session.id, exercise_id, set_num, reps_done ?? null, skipped ? 1 : 0, weight_used ?? null).lastInsertRowid;
+    }
 
-  const { lastInsertRowid } = db.prepare(
-    'INSERT INTO logged_sets (session_id, exercise_id, set_num, reps_done, skipped, weight_used) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(req.params.id, exercise_id, set_num, reps_done ?? null, skipped ? 1 : 0, weight_used ?? null);
+    // Stamp the session date on the first live log (blank, never-finalized
+    // sessions only); the DELETE handler clears it back to NULL if emptied.
+    if (session.date == null) {
+      db.prepare(`UPDATE sessions SET date = date('now')
+        WHERE id = ? AND date IS NULL AND checked_in = 0 AND unlocked = 0`).run(session.id);
+      session.date = db.prepare('SELECT date FROM sessions WHERE id = ?').get(session.id).date;
+    }
 
-  // Date stamping rules:
-  //   - Blank session (no live logs): date is NULL, displayed as "today".
-  //   - First live log lands → stamp date = today. Locked while in-progress.
-  //   - All sets unlogged again → DELETE handler clears date back to NULL.
-  //   - Once finalized (checked_in=1 or unlocked=1), date is locked forever.
-  // The WHERE clause ensures we only stamp blank, never-finalized sessions —
-  // even if a later "first live log" event fires for some other reason.
-  const liveCount = db.prepare(
-    'SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
-  ).get(req.params.id).n;
-  if (liveCount === 1) {
-    db.prepare(`
-      UPDATE sessions SET date = date('now')
-      WHERE id = ? AND date IS NULL AND checked_in = 0 AND unlocked = 0
-    `).run(req.params.id);
-  }
+    // Re-derive the exercise's next-session targets and the session's
+    // completion flag from the new performance data.
+    recomputeExercise(session, exercise_id);
+    updateCompletion(session);
+    return id;
+  })();
 
-  res.status(201).json({ id: lastInsertRowid });
+  res.status(201).json({ id: rowId });
 });
 
 router.delete('/:id/sets/:exerciseId/:setNum', (req, res) => {
-  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
+  const exerciseId = parseInt(req.params.exerciseId, 10);
 
-  db.prepare(
-    'DELETE FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ?'
-  ).run(req.params.id, req.params.exerciseId, req.params.setNum);
+  db.transaction(() => {
+    db.prepare('DELETE FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ?')
+      .run(session.id, exerciseId, req.params.setNum);
 
-  // If the session is now blank again (and never finalized), unlock its date
-  // so future visits show today's date until a new first-log re-stamps it.
-  const liveCount = db.prepare(
-    'SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
-  ).get(req.params.id).n;
-  if (liveCount === 0) {
-    db.prepare(`
-      UPDATE sessions SET date = NULL
-      WHERE id = ? AND checked_in = 0 AND unlocked = 0
-    `).run(req.params.id);
-  }
+    // If the session is blank again (and never finalized), clear its date.
+    const liveCount = db.prepare(
+      'SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
+    ).get(session.id).n;
+    if (liveCount === 0) {
+      db.prepare(`UPDATE sessions SET date = NULL WHERE id = ? AND checked_in = 0 AND unlocked = 0`).run(session.id);
+      const r = db.prepare('SELECT date FROM sessions WHERE id = ?').get(session.id);
+      session.date = r.date;
+    }
+
+    recomputeExercise(session, exerciseId);
+    updateCompletion(session);
+  })();
 
   res.json({ ok: true });
-});
-
-router.delete('/:id/checkins/:muscleGroup', (req, res) => {
-  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-  if (!session) return res.status(404).json({ error: 'Not found' });
-  db.prepare('DELETE FROM session_checkins WHERE session_id = ? AND muscle_group = ?')
-    .run(req.params.id, req.params.muscleGroup);
-  db.prepare('UPDATE sessions SET checked_in = 0 WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
-});
-
-router.get('/:id/checkins', (req, res) => {
-  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-  if (!session) return res.status(404).json({ error: 'Not found' });
-  const rows = db.prepare('SELECT muscle_group FROM session_checkins WHERE session_id = ?').all(req.params.id);
-  res.json(rows.map(r => r.muscle_group));
-});
-
-router.post('/:id/checkin', (req, res) => {
-  const { pain, recovery, pump, intensity, pause_weight, muscle_group } = req.body;
-  const sessionId = req.params.id;
-
-  const session = db.prepare(
-    'SELECT plan_id, date, session_dow FROM sessions WHERE id = ? AND user_id = ?'
-  ).get(sessionId, req.user.id);
-  if (!session) return res.status(404).json({ error: 'Not found' });
-  const planId = session.plan_id ?? null;
-
-  const modifier = computeCheckinModifier({ pain, recovery, pump, intensity });
-
-  const mgSettings   = db.prepare(
-    'SELECT rep_range, aggressiveness FROM muscle_group_settings WHERE user_id = ? AND muscle_group = ?'
-  ).get(req.user.id, muscle_group) ?? {};
-  const repRange       = mgSettings.rep_range      ?? 'standard';
-  const aggressiveness = mgSettings.aggressiveness ?? 'moderate';
-
-  // Anchor next-day target validity on the session's actual workout date,
-  // not "tomorrow from now". This keeps check-in writes and unlock cleanup
-  // consistent (unlock deletes WHERE valid_from = session.date + 1 day),
-  // and is correct even if check-in happens days after the workout.
-  const sessionDateStr = session.date ?? todayStr();
-  const tomorrow = new Date(sessionDateStr + 'T00:00:00Z');
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-  // Only consider algorithm-computed targets (is_suggestion = 0).
-  // User-entered starting suggestions are intentionally excluded — the algorithm
-  // bootstraps from the first actually-logged session instead (see setData below).
-  const getTarget = db.prepare(`
-    SELECT st.*, e.default_increment as increment, e.equipment
-    FROM set_targets st JOIN exercises e ON e.id = st.exercise_id
-    WHERE st.exercise_id = ? AND st.set_num = ?
-      AND st.valid_from <= date('now') AND st.plan_id IS ?
-      AND st.is_suggestion = 0
-    ORDER BY st.valid_from DESC LIMIT 1
-  `);
-  const writeTarget = db.prepare(
-    'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-  const getBwTarget = db.prepare(
-    "SELECT weight, reps FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND is_suggestion = 0 AND valid_from <= date('now') ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1"
-  );
-  const getBwCount  = db.prepare('SELECT MAX(set_count) as n FROM schedule WHERE exercise_id = ? AND plan_id IS ?');
-  const bumpBwCount = db.prepare('UPDATE schedule SET set_count = set_count + 1 WHERE exercise_id = ? AND plan_id IS ? AND set_count < 6');
-
-  // The whole check-in is one atomic transaction: the session_checkins row,
-  // the algorithm's new targets, bodyweight set bumps, and the checked_in
-  // flag all commit together or not at all. A partial failure must never
-  // leave a recorded check-in behind a 500 response — that divergence is
-  // what made already-submitted check-ins re-appear on Finish.
-  const applyCheckin = db.transaction(() => {
-    db.prepare(`
-      INSERT OR REPLACE INTO session_checkins (session_id, muscle_group, pain, recovery, pump, intensity, pause_weight)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(sessionId, muscle_group, pain, recovery, pump, intensity ?? null, pause_weight ? 1 : 0);
-
-    const loggedSets = db.prepare(`
-      SELECT ls.*, e.equipment, e.default_increment FROM logged_sets ls
-      JOIN exercises e ON e.id = ls.exercise_id
-      WHERE ls.session_id = ? AND e.muscle_group = ?
-    `).all(sessionId, muscle_group);
-
-    // Group logged sets by exercise so the algorithm sees the full cluster at once
-    const byExercise = new Map();
-    for (const ls of loggedSets) {
-      if (!byExercise.has(ls.exercise_id)) byExercise.set(ls.exercise_id, []);
-      byExercise.get(ls.exercise_id).push(ls);
-    }
-
-    for (const [exerciseId, sets] of byExercise) {
-      const setData = sets
-        .map(ls => {
-          const target = getTarget.get(exerciseId, ls.set_num, planId);
-          if (target) return { set_num: ls.set_num, target, logged: ls };
-          // No algorithm target yet (first time this exercise is logged in this
-          // plan). Bootstrap: treat the logged weight/reps as the reference point
-          // so the algorithm can compute where to go next session.
-          if (!ls.skipped && ls.reps_done != null && ls.weight_used != null) {
-            return {
-              set_num: ls.set_num,
-              target:  { weight: ls.weight_used, reps: ls.reps_done, increment: ls.default_increment ?? 2.5, equipment: ls.equipment },
-              logged:  ls,
-            };
-          }
-          return null;
-        })
-        .filter(Boolean);
-      if (!setData.length) continue;
-
-      const newTargets = nextExerciseTargets(setData, modifier, {
-        pauseWeight: !!pause_weight, pain, repRange, aggressiveness,
-      });
-      for (const { set_num, weight, reps } of newTargets) {
-        writeTarget.run(exerciseId, set_num, weight, reps, tomorrowStr, planId);
-      }
-    }
-
-    // Bodyweight: if any set logged > 50 reps, add a set to the schedule (max 6)
-    const bwOver50 = [...new Set(
-      loggedSets
-        .filter(ls => ls.equipment === 'bodyweight' && !ls.skipped && ls.reps_done > 50)
-        .map(ls => ls.exercise_id)
-    )];
-    for (const exId of bwOver50) {
-      const cur = getBwCount.get(exId, planId)?.n ?? 0;
-      if (cur >= 6) continue;
-      bumpBwCount.run(exId, planId);
-      const tmpl = getBwTarget.get(exId, cur, planId);
-      writeTarget.run(exId, cur + 1, tmpl?.weight ?? 0, tmpl?.reps ?? 10, tomorrowStr, planId);
-    }
-
-    // Mark the session complete only when BOTH hold:
-    //  (a) every muscle group with a real (non-skipped) logged set is checked in
-    //  (b) the whole day's schedule is accounted for (logged or skipped)
-    // Without (b), checking in the muscle groups touched so far would
-    // prematurely complete the session while later exercises remain unlogged.
-    const allGroups = db.prepare(`
-      SELECT DISTINCT e.muscle_group FROM logged_sets ls
-      JOIN exercises e ON e.id = ls.exercise_id
-      WHERE ls.session_id = ? AND ls.skipped = 0
-    `).all(sessionId).map(r => r.muscle_group);
-    const checkedGroups = db.prepare(
-      'SELECT muscle_group FROM session_checkins WHERE session_id = ?'
-    ).all(sessionId).map(r => r.muscle_group);
-    const expectedSets = db.prepare(
-      'SELECT COALESCE(SUM(set_count), 0) AS n FROM schedule WHERE plan_id IS ? AND day_of_week = ?'
-    ).get(planId, session.session_dow).n;
-    const doneSets = db.prepare(
-      'SELECT COUNT(*) AS n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
-    ).get(sessionId).n;
-    const scheduleDone = expectedSets > 0 && doneSets >= expectedSets;
-
-    if (scheduleDone && allGroups.length > 0 && allGroups.every(g => checkedGroups.includes(g))) {
-      db.prepare('UPDATE sessions SET checked_in = 1, unlocked = 0 WHERE id = ?').run(sessionId);
-    }
-  });
-
-  applyCheckin();
-  res.json({ ok: true, modifier });
 });
 
 router.get('/history', (req, res) => {
