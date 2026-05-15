@@ -184,7 +184,6 @@ router.post('/:id/unlock', (req, res) => {
   if (!isDone) return res.status(400).json({ error: 'Session is not completed' });
 
   db.transaction(() => {
-    db.prepare('DELETE FROM session_checkins WHERE session_id = ?').run(session.id);
     if (session.date) {
       const nextDay = new Date(session.date + 'T00:00:00Z');
       nextDay.setUTCDate(nextDay.getUTCDate() + 1);

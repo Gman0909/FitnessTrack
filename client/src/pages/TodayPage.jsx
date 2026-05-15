@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
+import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtShort(dateStr) {
@@ -561,7 +562,7 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
 // ── Exercise card ──────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, onAddSet, onRemoveSet, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
+function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
   const { unit } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
@@ -645,6 +646,13 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, isDragOver, onDragStart
                 title="View history">
                 <HistoryIcon />
               </button>
+              {onEdit && (
+                <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }}
+                  style={{ background:'none', border:'none', padding:'2px', cursor:'pointer', color:'var(--muted)', lineHeight:1, display:'flex', alignItems:'center', fontSize:'0.95rem' }}
+                  title="Edit exercise">
+                  ✎
+                </button>
+              )}
             </div>
             <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
           </div>
@@ -759,6 +767,7 @@ export default function TodayPage() {
   const [reloadKey, setReloadKey]       = useState(0);
   const [finishModal, setFinishModal]   = useState(null);
   const [skipConfirm, setSkipConfirm]   = useState(false);
+  const [editingExercise, setEditingExercise] = useState(null);
   // Guards the one-shot "workout just completed" side effects (calendar
   // refresh, end-of-plan modal) so they don't re-fire every render.
   const completionHandledRef = useRef(false);
@@ -1226,6 +1235,7 @@ export default function TodayPage() {
               exercise={ex}
               onAddSet={() => onAddSet(ex.exercise_id)}
               onRemoveSet={() => onRemoveSet(ex.exercise_id)}
+              onEdit={() => setEditingExercise(ex)}
               isDragOver={dragOverId === ex.exercise_id}
               onDragStart={() => setDragExId(ex.exercise_id)}
               onDragOver={() => { if (dragExerciseId && dragExerciseId !== ex.exercise_id) setDragOverId(ex.exercise_id); }}
@@ -1274,6 +1284,23 @@ export default function TodayPage() {
         <SkipSessionModal
           onConfirm={async () => { await handleSkipSession(); setSkipConfirm(false); }}
           onCancel={() => setSkipConfirm(false)}
+        />
+      )}
+
+      {editingExercise && (
+        <ExerciseEditModal
+          exercise={{
+            id: editingExercise.exercise_id,
+            name: editingExercise.name,
+            muscle_group: editingExercise.muscle_group,
+            equipment: editingExercise.equipment,
+            default_increment: editingExercise.default_increment,
+            rep_min: editingExercise.rep_min,
+            rep_max: editingExercise.rep_max,
+          }}
+          slot={{ planId: editingExercise.plan_id, scheduleId: editingExercise.schedule_id, setCount: editingExercise.set_count }}
+          onSaved={() => { setEditingExercise(null); setReloadKey(k => k + 1); }}
+          onClose={() => setEditingExercise(null)}
         />
       )}
 

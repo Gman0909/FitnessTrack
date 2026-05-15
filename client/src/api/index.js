@@ -31,7 +31,6 @@ export const api = {
   addToSchedule:      (body)     => req('POST',   '/schedule', body),
   updateScheduleSlot: (id, body) => req('PATCH',  `/schedule/${id}`, body),
   removeFromSchedule: (id)       => req('DELETE', `/schedule/${id}`),
-  setTarget:          (body)     => req('POST',   '/schedule/targets', body),
 
   // History
   getLoggedExercises: ()   => req('GET', '/sessions/history'),
@@ -59,10 +58,6 @@ export const api = {
   // Admin
   triggerUpdate:    () => req('POST', '/admin/update'),
   getUpdateStatus:  () => req('GET',  '/admin/update-status'),
-
-  // Settings
-  getMuscleGroupSettings:    ()            => req('GET', '/settings/muscle-groups'),
-  updateMuscleGroupSetting:  (group, body) => req('PUT', `/settings/muscle-groups/${encodeURIComponent(group)}`, body),
 
   // Auth
   getMe:         ()       => req('GET',   '/auth/me'),

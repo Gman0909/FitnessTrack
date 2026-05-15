@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
+import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
 
 const DAY_LABELS    = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DAY_SHORT     = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -257,6 +258,7 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
 function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
   const { display }         = useUnit();
   const [dragOver, setDragOver] = useState(null);
+  const [editSlot, setEditSlot] = useState(null);
   const draggingId          = useRef(null);
 
   const sorted = [...slots].sort((a, b) => a.position - b.position);
@@ -344,6 +346,8 @@ function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
               <span style={{ color: 'var(--muted)' }}>{slot.set_count} set{slot.set_count !== 1 ? 's' : ''}{slot.weight != null ? ` · ${display(slot.weight)}` : ''}</span>
             </span>
           </div>
+          <button onClick={() => setEditSlot(slot)} aria-label="Edit exercise"
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1rem', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '6px' }}>✎</button>
           <button onClick={() => handleDelete(slot.id)} aria-label="Remove exercise"
             style={{
               background: 'none',
@@ -361,6 +365,22 @@ function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
             }}>✕</button>
         </div>
       ))}
+      {editSlot && (
+        <ExerciseEditModal
+          exercise={{
+            id: editSlot.exercise_id,
+            name: editSlot.name,
+            muscle_group: editSlot.muscle_group,
+            equipment: editSlot.equipment,
+            default_increment: editSlot.default_increment,
+            rep_min: editSlot.rep_min,
+            rep_max: editSlot.rep_max,
+          }}
+          slot={{ planId, scheduleId: editSlot.id, setCount: editSlot.set_count }}
+          onSaved={() => { setEditSlot(null); onRefresh(); }}
+          onClose={() => setEditSlot(null)}
+        />
+      )}
     </div>
   );
 }

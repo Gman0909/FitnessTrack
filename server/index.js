@@ -10,7 +10,6 @@ import sessionsRouter  from './routes/sessions.js';
 import plansRouter     from './routes/plans.js';
 import statsRouter     from './routes/stats.js';
 import adminRouter     from './routes/admin.js';
-import settingsRouter  from './routes/settings.js';
 import { requireAuth } from './middleware/auth.js';
 import { seed }        from './seed.js';
 
@@ -30,7 +29,6 @@ app.use('/api/sessions',  requireAuth, sessionsRouter);
 app.use('/api/plans',     requireAuth, plansRouter);
 app.use('/api/stats',     requireAuth, statsRouter);
 app.use('/api/admin',     adminRouter);
-app.use('/api/settings',  requireAuth, settingsRouter);
 
 // 404 any /api/* path that didn't match a route above — prevents catch-all from serving index.html for missing API endpoints
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));

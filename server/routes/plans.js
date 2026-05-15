@@ -15,6 +15,7 @@ function getPlanSlots(planId) {
   return db.prepare(`
     SELECT s.id, s.day_of_week, s.set_count, s.position,
            e.id as exercise_id, e.name, e.muscle_group, e.equipment,
+           e.default_increment, e.rep_min, e.rep_max,
            (SELECT st.weight FROM set_targets st
             WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
               AND st.plan_id IS s.plan_id

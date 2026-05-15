@@ -35,6 +35,11 @@
       body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
       button { cursor: pointer; }
       select, input, option { color-scheme: dark; }
+      /* Hide native number-input spinners — they clash with the per-set
+         performance indicator and add nothing on a touch device. */
+      input[type=number]::-webkit-outer-spin-button,
+      input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     </style>
   </head>
   <body>

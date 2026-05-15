@@ -78,15 +78,6 @@ db.exec(`
     weight_used REAL
   );
 
-  CREATE TABLE IF NOT EXISTS session_checkins (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id   INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    muscle_group TEXT    NOT NULL,
-    pain         TEXT,
-    recovery     TEXT,
-    pump         TEXT,
-    UNIQUE(session_id, muscle_group)
-  );
 
   CREATE TABLE IF NOT EXISTS workout_plans (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,18 +211,18 @@ if (!cols('sessions').includes('week_num')) {
   db.pragma('foreign_keys = ON');
 }
 
-if (!cols('session_checkins').includes('intensity'))
-  db.exec('ALTER TABLE session_checkins ADD COLUMN intensity TEXT');
-if (!cols('session_checkins').includes('pause_weight'))
-  db.exec('ALTER TABLE session_checkins ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
 if (!cols('sessions').includes('unlocked'))
   db.exec('ALTER TABLE sessions ADD COLUMN unlocked INTEGER NOT NULL DEFAULT 0');
 
 // Distinguish user-entered starting suggestions from algorithm-computed targets.
-// Suggestions are shown in the UI as pre-fills but are never used by the
-// progression algorithm, which instead bootstraps from the first logged session.
 if (!cols('set_targets').includes('is_suggestion'))
   db.exec('ALTER TABLE set_targets ADD COLUMN is_suggestion INTEGER NOT NULL DEFAULT 0');
+
+// Drop tables retired with the move to performance-based double progression:
+// session_checkins (subjective pain/recovery/pump/intensity feedback) and
+// muscle_group_settings (per-group rep range / speed — now per exercise).
+db.exec('DROP TABLE IF EXISTS session_checkins');
+db.exec('DROP TABLE IF EXISTS muscle_group_settings');
 
 // Per-exercise rep range for double-progression. Seeded by exercise type;
 // editable per exercise. Default 8–12 (isolation) until the seed syncs the
@@ -257,20 +248,6 @@ db.prepare(`
     )
 `).run();
 
-// ── Per-muscle-group training preferences ─────────────────────────────────────
-
-const tableNames = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map(r => r.name);
-if (!tableNames.includes('muscle_group_settings')) {
-  db.exec(`
-    CREATE TABLE muscle_group_settings (
-      user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      muscle_group   TEXT    NOT NULL,
-      rep_range      TEXT    NOT NULL DEFAULT 'standard',
-      aggressiveness TEXT    NOT NULL DEFAULT 'moderate',
-      PRIMARY KEY (user_id, muscle_group)
-    )
-  `);
-}
 
 // ── Default equipment (all enabled on first install) ─────────────────────────
 

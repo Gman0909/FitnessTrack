@@ -149,26 +149,4 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// Record the user's starting-weight suggestion for a scheduled exercise.
-// Suggestions are shown in the UI as pre-fills but are ignored by the
-// progression algorithm; the algorithm bootstraps from the first logged session.
-// Idempotent: if the exercise already has a suggestion for this plan (because
-// it appears on multiple days), the first entry wins and subsequent calls are
-// no-ops — targets are plan-wide, not per-day.
-router.post('/targets', (req, res) => {
-  const { exercise_id, set_num, weight, reps, plan_id } = req.body;
-  if (plan_id != null && !db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(plan_id, req.user.id))
-    return res.status(404).json({ error: 'Plan not found' });
-  const exists = db.prepare(
-    'SELECT 1 FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND is_suggestion = 1'
-  ).get(exercise_id, set_num, plan_id ?? null);
-  if (exists) return res.status(200).json({ id: null, skipped: true });
-
-  const today = new Date().toISOString().split('T')[0];
-  const result = db.prepare(
-    'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id, is_suggestion) VALUES (?, ?, ?, ?, ?, ?, 1)'
-  ).run(exercise_id, set_num, weight, reps, today, plan_id ?? null);
-  res.status(201).json({ id: result.lastInsertRowid });
-});
-
 export default router;
