@@ -453,7 +453,7 @@ function SetRow({
 
 function HistoryIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor"
       strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13 8A5 5 0 1 1 8 3" />
       <polyline points="5.5,1.5 8,3 5.5,4.5" />
@@ -588,6 +588,10 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, isDragOver, onD
   const { unit } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
+  // Header action buttons (history / edit) — sized as proper tap targets.
+  const iconBtn     = { background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'8px',
+    width:'34px', height:'34px', display:'flex', alignItems:'center', justifyContent:'center',
+    cursor:'pointer', color:'var(--muted)', flexShrink:0, padding:0 };
   const isSetDone   = (setNum) => {
     const st = getStatus(exercise.exercise_id, setNum);
     return st.status === 'logged' || st.status === 'skipped';
@@ -661,17 +665,15 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, isDragOver, onD
         <span style={{ color:'var(--dim)', fontSize:'1rem', marginTop:'3px', flexShrink:0, letterSpacing:'-1px' }}>⠿</span>
         <div style={{ flex:1 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'5px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span style={{ fontWeight:'600', fontSize:'1.05rem', color:'var(--text)' }}>{exercise.name}</span>
               <button type="button" onClick={e => { e.stopPropagation(); setHistoryOpen(true); }}
-                style={{ background:'none', border:'none', padding:'2px', cursor:'pointer', color:'var(--muted)', lineHeight:1, display:'flex', alignItems:'center' }}
-                title="View history">
+                style={iconBtn} title="View history">
                 <HistoryIcon />
               </button>
               {onEdit && (
                 <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }}
-                  style={{ background:'none', border:'none', padding:'2px', cursor:'pointer', color:'var(--muted)', lineHeight:1, display:'flex', alignItems:'center', fontSize:'0.95rem' }}
-                  title="Edit exercise">
+                  style={{ ...iconBtn, fontSize:'1.2rem', lineHeight:1 }} title="Edit exercise">
                   ✎
                 </button>
               )}
