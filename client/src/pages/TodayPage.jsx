@@ -251,6 +251,7 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
   const [form, setForm]       = useState({ pain: 'none', recovery: 'healed', pump: 'ok', intensity: 'just_right' });
   const [pauseWeight, setPause] = useState(false);
   const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState(null);
 
   const fields = [
     { key: 'pain',      label: 'Pain',      options: [{ v:'none',l:'None' },{ v:'low',l:'Low' },{ v:'medium',l:'Medium' },{ v:'high',l:'High' }] },
@@ -261,7 +262,16 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
 
   async function handleSubmit() {
     setSaving(true);
-    await api.checkin(sessionId, { ...form, pause_weight: pauseWeight, muscle_group: muscleGroup });
+    setError(null);
+    try {
+      await api.checkin(sessionId, { ...form, pause_weight: pauseWeight, muscle_group: muscleGroup });
+    } catch {
+      // Keep the modal open so the check-in is never silently lost — the
+      // user can retry. onCheckin only runs on a confirmed server write.
+      setSaving(false);
+      setError('Check-in could not be saved. Check your connection and try again.');
+      return;
+    }
     onCheckin(muscleGroup);
   }
 
@@ -323,9 +333,12 @@ function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
             style={{ width:'1.15rem', height:'1.15rem', accentColor:'var(--btn)', cursor:'pointer', flexShrink:0 }} />
           <span style={{ fontSize:'0.9rem', color:'var(--muted)' }}>Pause weight increases</span>
         </label>
+        {error && (
+          <p style={{ margin:0, color:'var(--danger)', fontSize:'0.85rem', textAlign:'center' }}>{error}</p>
+        )}
         <button type="button" onClick={handleSubmit} disabled={saving}
           style={{ width:'100%', padding:'0.95rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'1rem', cursor:'pointer', minHeight:'48px' }}>
-          {saving ? 'Saving…' : 'Submit check-in'}
+          {saving ? 'Saving…' : error ? 'Retry check-in' : 'Submit check-in'}
         </button>
       </div>
     </div>
@@ -390,10 +403,17 @@ function SkipSessionModal({ onConfirm, onCancel }) {
 function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
   const { display } = useUnit();
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState(null);
 
   async function handleConfirm() {
     setConfirming(true);
-    await onConfirm();
+    setError(null);
+    try {
+      await onConfirm();
+    } catch {
+      setConfirming(false);
+      setError('Could not save. Check your connection and try again.');
+    }
   }
 
   const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
@@ -427,6 +447,9 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
           </div>
         )}
 
+        {error && (
+          <p style={{ margin:0, color:'var(--danger)', fontSize:'0.85rem', textAlign:'center' }}>{error}</p>
+        )}
         <div style={{ display:'flex', gap:'0.5rem', marginTop:'0.25rem' }}>
           <button type="button" onClick={onCancel} disabled={confirming}
             style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
@@ -434,7 +457,7 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
           </button>
           <button type="button" onClick={handleConfirm} disabled={confirming}
             style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor: confirming ? 'default' : 'pointer' }}>
-            {confirming ? 'Logging…' : 'Confirm'}
+            {confirming ? 'Logging…' : error ? 'Retry' : 'Confirm'}
           </button>
         </div>
       </div>
@@ -1151,12 +1174,16 @@ export default function TodayPage() {
     setPending(null);
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
 
-    // Reload slot when all groups *requiring* a check-in have one. All-skipped
-    // groups don't need check-in rows (server filters them out), so we only
-    // wait on groups with logged sets.
+    // Reload the slot only when the session is genuinely complete: every
+    // scheduled exercise logged/skipped AND every group needing a check-in
+    // has one. This mirrors the server's completion rule — reloading earlier
+    // would re-read a still-in-progress session and reset live state.
     const updatedGroups = new Set([...checkedInGroups, muscleGroup]);
     const groupsNeedingCheckin = groups.filter(groupHasLoggedSets);
-    if (groupsNeedingCheckin.every(g => updatedGroups.has(g.muscle_group))) {
+    const sessionComplete =
+      groups.every(groupIsDone) &&
+      groupsNeedingCheckin.every(g => updatedGroups.has(g.muscle_group));
+    if (sessionComplete) {
       const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
       const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
       if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow) {
@@ -1322,13 +1349,13 @@ export default function TodayPage() {
       }
     }
     if (toLog.length === 0 && toSkip.length === 0) {
-      // Everything already accounted for — re-trigger check-in modals for any
-      // unchecked groups that have at least one logged set. All-skipped groups
-      // are silently fine (server doesn't require check-ins for them).
-      const needsCheckin = groups.some(g =>
-        groupIsDone(g) && !checkedInGroups.has(g.muscle_group) && groupHasLoggedSets(g)
-      );
-      if (needsCheckin) setDismissed(new Set());
+      // Everything is already logged/skipped. Reload so check-in state is
+      // re-read from the server (the authoritative source) before re-firing
+      // modals — this avoids re-prompting groups that are in fact checked in
+      // but which a failed/stale client update dropped from checkedInGroups.
+      setDismissed(new Set());
+      skipPreDismissOnceRef.current = true;
+      setReloadKey(k => k + 1);
       return;
     }
     setFinishModal({ toLog, toSkip });
