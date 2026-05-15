@@ -29,13 +29,16 @@ router.get('/today', (req, res) => {
 
   const slots = db.prepare(`
     SELECT s.id as schedule_id, s.set_count, s.position, s.plan_id,
-           e.id as exercise_id, e.name, e.muscle_group, e.equipment, e.default_increment,
-           e.rep_min, e.rep_max
+           e.id as exercise_id, e.name, e.muscle_group, e.equipment,
+           COALESCE(ues.default_increment, e.default_increment) AS default_increment,
+           COALESCE(ues.rep_min, e.rep_min) AS rep_min,
+           COALESCE(ues.rep_max, e.rep_max) AS rep_max
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.day_of_week = ? AND s.plan_id = ?
       AND EXISTS (SELECT 1 FROM plan_days pd WHERE pd.plan_id = s.plan_id AND pd.day_of_week = s.day_of_week)
     ORDER BY s.position
-  `).all(dayOfWeek, activePlan.id);
+  `).all(req.user.id, dayOfWeek, activePlan.id);
 
   // The session being viewed (when week is provided). Its date — when set —
   // serves as the cutoff for prev: only logs from sessions strictly before

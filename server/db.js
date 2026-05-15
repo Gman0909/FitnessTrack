@@ -224,13 +224,28 @@ if (!cols('set_targets').includes('is_suggestion'))
 db.exec('DROP TABLE IF EXISTS session_checkins');
 db.exec('DROP TABLE IF EXISTS muscle_group_settings');
 
-// Per-exercise rep range for double-progression. Seeded by exercise type;
-// editable per exercise. Default 8–12 (isolation) until the seed syncs the
-// researched range onto each row.
+// Per-exercise rep range for double-progression. Seeded by exercise type.
+// The exercises columns hold the shared default; per-user tweaks live in
+// user_exercise_settings (below) and override the default for that user.
 if (!cols('exercises').includes('rep_min'))
   db.exec('ALTER TABLE exercises ADD COLUMN rep_min INTEGER NOT NULL DEFAULT 8');
 if (!cols('exercises').includes('rep_max'))
   db.exec('ALTER TABLE exercises ADD COLUMN rep_max INTEGER NOT NULL DEFAULT 12');
+
+// Per-user overrides of an exercise's training parameters (rep range, weight
+// increment). NULL columns fall through to the exercises-table default. The
+// range/increment that suits one lifter may not suit another, so these are
+// personal; name/muscle group/equipment stay shared.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_exercise_settings (
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise_id       INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    rep_min           INTEGER,
+    rep_max           INTEGER,
+    default_increment REAL,
+    PRIMARY KEY (user_id, exercise_id)
+  )
+`);
 
 // Clear stale dates on currently-blank, never-finalized sessions. Earlier
 // versions stamped session.date at slot-creation time (when the user merely

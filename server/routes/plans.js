@@ -11,19 +11,22 @@ function getPlanDays(planId) {
     .all(planId).map(r => r.day_of_week);
 }
 
-function getPlanSlots(planId) {
+function getPlanSlots(planId, userId) {
   return db.prepare(`
     SELECT s.id, s.day_of_week, s.set_count, s.position,
            e.id as exercise_id, e.name, e.muscle_group, e.equipment,
-           e.default_increment, e.rep_min, e.rep_max,
+           COALESCE(ues.default_increment, e.default_increment) AS default_increment,
+           COALESCE(ues.rep_min, e.rep_min) AS rep_min,
+           COALESCE(ues.rep_max, e.rep_max) AS rep_max,
            (SELECT st.weight FROM set_targets st
             WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
               AND st.plan_id IS s.plan_id
             ORDER BY st.is_suggestion ASC, st.valid_from DESC LIMIT 1) as weight
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.plan_id = ?
     ORDER BY s.day_of_week, s.position
-  `).all(planId);
+  `).all(userId, planId);
 }
 
 function ownPlan(planId, userId) {
@@ -85,7 +88,7 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const plan = db.prepare('SELECT * FROM workout_plans WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!plan) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...plan, days: getPlanDays(plan.id), slots: getPlanSlots(plan.id) });
+  res.json({ ...plan, days: getPlanDays(plan.id), slots: getPlanSlots(plan.id, req.user.id) });
 });
 
 router.patch('/:id', (req, res) => {

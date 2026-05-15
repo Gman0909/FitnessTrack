@@ -116,6 +116,11 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
           <span style={{ fontSize: '0.8rem', color: 'var(--dim)' }}>kg</span>
         </div>
 
+        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dim)', lineHeight: 1.5 }}>
+          Rep range, weight increment and set count are personal to you. Name,
+          muscle group and equipment are shared across accounts.
+        </p>
+
         {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>

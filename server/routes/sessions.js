@@ -22,11 +22,17 @@ const addDay = dateStr => {
 // Pure performance-based: no check-ins, no subjective modifiers.
 function recomputeExercise(session, exerciseId) {
   const planId = session.plan_id ?? null;
+  // Rep range / increment are the session owner's effective values — their
+  // personal override if set, otherwise the exercise's shared default.
   const sched = db.prepare(`
-    SELECT s.set_count, e.equipment, e.default_increment, e.rep_min, e.rep_max
+    SELECT s.set_count, e.equipment,
+           COALESCE(ues.default_increment, e.default_increment) AS default_increment,
+           COALESCE(ues.rep_min, e.rep_min) AS rep_min,
+           COALESCE(ues.rep_max, e.rep_max) AS rep_max
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.plan_id IS ? AND s.day_of_week = ? AND s.exercise_id = ?
-  `).get(planId, session.session_dow, exerciseId);
+  `).get(session.user_id, planId, session.session_dow, exerciseId);
   if (!sched) return;
 
   const sessionDateStr = session.date ?? todayStr();
