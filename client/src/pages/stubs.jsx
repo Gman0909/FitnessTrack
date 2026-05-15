@@ -227,51 +227,6 @@ export function SetupPage() {
       </section>
 
       <section style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
-        <h3 style={{ fontSize: '1rem', marginBottom: '0.25rem', color: 'var(--text)' }}>Training preferences</h3>
-        <p style={{ color: 'var(--muted)', fontSize: '0.875rem', margin: '0 0 1rem' }}>
-          Rep range controls when weight increases; speed controls how boldly the algorithm responds to positive check-in signals.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-          {mgSettings.map(({ muscle_group, rep_range, aggressiveness }) => (
-            <div key={muscle_group} style={{
-              display: 'flex', flexDirection: 'column', gap: '0.65rem',
-              padding: '0.85rem 0.9rem',
-              border: '1px solid var(--border)', borderRadius: '10px',
-              background: 'var(--surface)',
-            }}>
-              <span style={{
-                fontWeight: '600', color: 'var(--text)', textTransform: 'capitalize', fontSize: '0.95rem',
-              }}>{muscle_group}</span>
-
-              <div>
-                <span style={{ display: 'block', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: '600', marginBottom: '0.3rem' }}>Rep range</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.35rem' }}>
-                  {REP_RANGE_OPTIONS.map(({ v, l, title }) => (
-                    <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'rep_range', v)}
-                      style={{ padding: '0.55rem 0', minHeight: '40px', border: `1px solid ${rep_range === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px', fontSize: '0.85rem', background: rep_range === v ? 'var(--btn)' : 'var(--surface2)', color: rep_range === v ? 'var(--btn-text)' : 'var(--text)', fontWeight: rep_range === v ? '600' : '500', cursor: 'pointer' }}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <span style={{ display: 'block', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: '600', marginBottom: '0.3rem' }}>Progression</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.35rem' }}>
-                  {AGGRESSIVENESS_OPTIONS.map(({ v, l, title }) => (
-                    <button key={v} title={title} onClick={() => handleMgUpdate(muscle_group, 'aggressiveness', v)}
-                      style={{ padding: '0.55rem 0', minHeight: '40px', border: `1px solid ${aggressiveness === v ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px', fontSize: '0.85rem', background: aggressiveness === v ? 'var(--btn)' : 'var(--surface2)', color: aggressiveness === v ? 'var(--btn-text)' : 'var(--text)', fontWeight: aggressiveness === v ? '600' : '500', cursor: 'pointer' }}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
         <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--text)' }}>Custom exercises</h3>
         {customs.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>No custom exercises yet. Create one from the Schedule exercise picker.</p>

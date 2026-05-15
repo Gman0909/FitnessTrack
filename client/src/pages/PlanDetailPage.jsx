@@ -61,10 +61,7 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
   const [newEquip, setNewEquip]       = useState('');
   const [newIncr, setNewIncr]         = useState('2.5');
   const [setCount, setSetCount]       = useState(3);
-  const [startWeight, setStartWeight] = useState('');
-  const [startReps, setStartReps]     = useState(8);
   const [saving, setSaving]           = useState(false);
-  const { unit, toKg }                = useUnit();
 
   useEffect(() => { api.getExercises({ user_equipment: true }).then(setExercises); }, []);
 
@@ -88,22 +85,14 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
     }
   }
 
-  const isBodyweight = selected?.equipment === 'bodyweight';
-  const parsedWeight = startWeight !== '' ? parseFloat(startWeight) : null;
-  const weightValid  = isBodyweight || parsedWeight === null || (Number.isFinite(parsedWeight) && parsedWeight > 0);
-
+  // No starting weight/reps prompt — a new exercise begins with an empty
+  // weight and reps at the floor of its rep range; double progression takes
+  // over from the first logged session.
   async function handleAdd() {
-    if (!selected || !weightValid) return;
+    if (!selected) return;
     setSaving(true);
     try {
       await api.addToPlanSchedule(planId, { day_of_week: dayIndex, exercise_id: selected.id, set_count: setCount, position: 999 });
-      const weightKg   = isBodyweight ? 0 : (parsedWeight !== null ? toKg(parsedWeight) : null);
-      const targetReps = isBodyweight ? 10 : startReps;
-      if (isBodyweight || weightKg !== null) {
-        for (let i = 1; i <= setCount; i++) {
-          await api.setTarget({ exercise_id: selected.id, set_num: i, weight: weightKg ?? 0, reps: targetReps, plan_id: planId });
-        }
-      }
       onAdd();
     } finally {
       setSaving(false);
@@ -219,30 +208,15 @@ function AddExerciseModal({ dayIndex, planId, onAdd, onClose }) {
                   ))}
                 </div>
               </div>
-              {!isBodyweight && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Starting weight <span style={{ fontSize: '0.78rem', color: 'var(--dim)' }}>(optional)</span></label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <input type="text" inputMode="decimal" value={startWeight} onChange={e => setStartWeight(e.target.value)} placeholder=""
-                      style={{ ...inputStyle, width: '120px', borderColor: !weightValid ? 'var(--danger)' : 'var(--border)' }} />
-                    <span style={{ fontSize: '0.95rem', color: 'var(--muted)' }}>{unit}</span>
-                  </div>
-                </div>
-              )}
-              {!isBodyweight && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Starting reps</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.4rem' }}>
-                    {[6,8,10,12].map(n => (
-                      <button key={n} onClick={() => setStartReps(n)}
-                        style={{ minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: startReps === n ? 'var(--btn)' : 'var(--surface)', color: startReps === n ? 'var(--btn-text)' : 'var(--text)', fontWeight: startReps === n ? '600' : '500', fontSize: '0.95rem', cursor: 'pointer' }}>{n}</button>
-                    ))}
-                  </div>
-                </div>
+              {selected && (
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--dim)', lineHeight: 1.5 }}>
+                  Target rep range: {selected.rep_min}–{selected.rep_max}. You'll enter the
+                  weight on your first session; progression takes over from there.
+                </p>
               )}
             </div>
-            <button onClick={handleAdd} disabled={saving || (!isBodyweight && !weightValid)}
-              style={{ marginTop: '0.25rem', padding: '0.95rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', opacity: saving || (!isBodyweight && !weightValid) ? 0.4 : 1, cursor: 'pointer', minHeight: '48px' }}>
+            <button onClick={handleAdd} disabled={saving}
+              style={{ marginTop: '0.25rem', padding: '0.95rem', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', opacity: saving ? 0.4 : 1, cursor: 'pointer', minHeight: '48px' }}>
               {saving ? 'Adding…' : `Add ${setCount} set${setCount !== 1 ? 's' : ''}`}
             </button>
           </>

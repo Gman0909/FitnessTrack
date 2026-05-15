@@ -18,15 +18,6 @@ const MC_COLORS = {
 };
 function mcColor(mg) { return MC_COLORS[mg] ?? '#777'; }
 
-function groupByMuscle(exercises) {
-  const order = [], map = new Map();
-  for (const ex of exercises) {
-    if (!map.has(ex.muscle_group)) { map.set(ex.muscle_group, []); order.push(ex.muscle_group); }
-    map.get(ex.muscle_group).push(ex);
-  }
-  return order.map(mg => ({ muscle_group: mg, exercises: map.get(mg) }));
-}
-
 function fmtDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
@@ -245,106 +236,6 @@ function DayPickerPanel({ calendarData, selectedSlot, onSelect, weekCount, onDec
   );
 }
 
-// ── Check-in modal ─────────────────────────────────────────────────────────────
-
-function CheckinModal({ sessionId, muscleGroup, onCheckin, onClose }) {
-  const [form, setForm]       = useState({ pain: 'none', recovery: 'healed', pump: 'ok', intensity: 'just_right' });
-  const [pauseWeight, setPause] = useState(false);
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState(null);
-
-  const fields = [
-    { key: 'pain',      label: 'Pain',      options: [{ v:'none',l:'None' },{ v:'low',l:'Low' },{ v:'medium',l:'Medium' },{ v:'high',l:'High' }] },
-    { key: 'recovery',  label: 'Recovery',  options: [{ v:'never_sore',l:'Never sore' },{ v:'still_sore',l:'Still sore' },{ v:'healed',l:'Healed' }] },
-    { key: 'pump',      label: 'Pump',      options: [{ v:'poor',l:'Poor' },{ v:'ok',l:'OK' },{ v:'great',l:'Great' }] },
-    { key: 'intensity', label: 'Intensity', options: [{ v:'too_easy',l:'Too easy' },{ v:'just_right',l:'Just right' },{ v:'too_much',l:'Too much' }] },
-  ];
-
-  async function handleSubmit() {
-    setSaving(true);
-    setError(null);
-    try {
-      await api.checkin(sessionId, { ...form, pause_weight: pauseWeight, muscle_group: muscleGroup });
-    } catch {
-      // Keep the modal open so the check-in is never silently lost — the
-      // user can retry. onCheckin only runs on a confirmed server write.
-      setSaving(false);
-      setError('Check-in could not be saved. Check your connection and try again.');
-      return;
-    }
-    onCheckin(muscleGroup);
-  }
-
-  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200, padding:0 };
-  const box     = {
-    background:'var(--surface2)',
-    borderRadius:'16px 16px 0 0',
-    padding:'1.25rem 1rem',
-    paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
-    width:'100%',
-    maxWidth:'520px',
-    display:'flex',
-    flexDirection:'column',
-    gap:'1.1rem',
-    border:'1px solid var(--border)',
-    maxHeight: '92vh',
-    overflowY: 'auto',
-  };
-
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={box}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
-            <MuscleGroupBadge muscleGroup={muscleGroup} />
-            <span style={{ color:'var(--muted)', fontSize:'0.95rem', fontWeight:500 }}>Check-in</span>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close"
-            style={{ background:'none', border:'none', color:'var(--muted)', fontSize:'1.5rem', cursor:'pointer', lineHeight:1, width:'40px', height:'40px', display:'flex', alignItems:'center', justifyContent:'center', margin:'-8px' }}>✕</button>
-        </div>
-        {fields.map(({ key, label, options }) => (
-          <div key={key} style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
-            <span style={{ fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', fontWeight:'600' }}>{label}</span>
-            <div style={{ display:'grid', gridTemplateColumns:`repeat(${options.length}, minmax(0, 1fr))`, gap:'0.4rem' }}>
-              {options.map(({ v, l }) => (
-                <button key={v} type="button" onClick={() => setForm(f => ({ ...f, [key]: v }))}
-                  style={{
-                    padding:'0.7rem 0.25rem',
-                    minHeight:'46px',
-                    border:`1px solid ${form[key]===v?'var(--btn)':'var(--border)'}`,
-                    borderRadius:'10px',
-                    fontSize:'0.85rem',
-                    lineHeight:1.15,
-                    background:form[key]===v?'var(--btn)':'var(--surface)',
-                    color:form[key]===v?'var(--btn-text)':'var(--text)',
-                    fontWeight:form[key]===v?'600':'500',
-                    cursor:'pointer',
-                    textAlign:'center',
-                    transition:'background 0.12s, color 0.12s, border-color 0.12s',
-                  }}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-        <label style={{ display:'flex', alignItems:'center', gap:'0.6rem', cursor:'pointer', userSelect:'none', padding:'0.5rem 0' }}>
-          <input type="checkbox" checked={pauseWeight} onChange={e => setPause(e.target.checked)}
-            style={{ width:'1.15rem', height:'1.15rem', accentColor:'var(--btn)', cursor:'pointer', flexShrink:0 }} />
-          <span style={{ fontSize:'0.9rem', color:'var(--muted)' }}>Pause weight increases</span>
-        </label>
-        {error && (
-          <p style={{ margin:0, color:'var(--danger)', fontSize:'0.85rem', textAlign:'center' }}>{error}</p>
-        )}
-        <button type="button" onClick={handleSubmit} disabled={saving}
-          style={{ width:'100%', padding:'0.95rem', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'1rem', cursor:'pointer', minHeight:'48px' }}>
-          {saving ? 'Saving…' : error ? 'Retry check-in' : 'Submit check-in'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Skip session confirm modal ────────────────────────────────────────────────
 
 function SkipSessionModal({ onConfirm, onCancel }) {
@@ -506,11 +397,18 @@ function SetRow({
     onClickTick();
   };
 
-  // Disable inputs once a set is logged. Editing a logged value used to call
-  // handleClear, which silently wiped the muscle group's check-in. Now the
-  // user must un-tick (via the ✓) first, making the reset explicit.
+  // Disable inputs once a set is logged — to edit, un-tick (✓) first.
   const inputsLocked = isReadOnly || isLogged;
   const lockedStyle  = isLogged ? { ...inputStyle, cursor: 'not-allowed' } : inputStyle;
+
+  // Actual-vs-target glyph: how the logged reps compared to the set's target.
+  const loggedReps = parseInt(reps, 10);
+  const perf = isLogged && Number.isFinite(loggedReps) && set.reps != null
+    ? (loggedReps > set.reps ? 'up' : loggedReps === set.reps ? 'met' : 'down')
+    : null;
+  const perfGlyph = { up: '▲', met: '=', down: '▼' };
+  const perfColor = { up: 'var(--success)', met: 'var(--dim)', down: 'var(--danger)' };
+
   return (
     <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
       {!isBodyweight && (
@@ -521,12 +419,21 @@ function SetRow({
           style={lockedStyle}
         />
       )}
-      <input type="number" value={reps} onChange={e => onRepsChange(e.target.value)}
-        onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
-        placeholder={String(set.reps)} min="1" max="999"
-        disabled={inputsLocked}
-        style={lockedStyle}
-      />
+      <div style={{ position:'relative' }}>
+        <input type="number" value={reps} onChange={e => onRepsChange(e.target.value)}
+          onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
+          placeholder={set.reps != null ? String(set.reps) : 'reps'} min="1" max="999"
+          disabled={inputsLocked}
+          style={{ ...lockedStyle, width:'100%' }}
+        />
+        {perf && (
+          <span title={`Target ${set.reps}`}
+            style={{ position:'absolute', right:'7px', top:'50%', transform:'translateY(-50%)',
+              fontSize:'0.8rem', fontWeight:700, color: perfColor[perf], pointerEvents:'none' }}>
+            {perfGlyph[perf]}
+          </span>
+        )}
+      </div>
       <div onClick={canLog ? onClickTick : undefined}
         style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0,
           cursor: isReadOnly ? 'default' : canLog ? 'pointer' : 'default',
@@ -654,7 +561,7 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
 // ── Exercise card ──────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, isGroupCheckedIn, onResetCheckin, onAddSet, onRemoveSet, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
+function ExerciseCard({ exercise, onAddSet, onRemoveSet, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
   const { unit } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
@@ -663,13 +570,15 @@ function ExerciseCard({ exercise, isGroupCheckedIn, onResetCheckin, onAddSet, on
     return st.status === 'logged' || st.status === 'skipped';
   };
   const lastSetDone = isSetDone(exercise.sets.length);
+  // "Complete" once every set is logged or skipped.
+  const exerciseComplete = exercise.sets.every(s => isSetDone(s.set_num));
 
-  // Volume hint: arrow + % volume delta, plus the algorithm's primary weight
-  // bump and the total reps delta — compared to the user's most recent logged
-  // completion of this exercise. Only sets with a genuine prior baseline count;
-  // sets newly added to the schedule are excluded so they don't distort math.
+  // Progressive-overload hint: arrow + % volume delta + primary weight bump +
+  // total reps delta — this session's target vs the user's last logged
+  // performance of this exercise. Shown only while the card is in progress;
+  // it disappears once every set is logged.
   let volumeHint = null;
-  const matched = isBodyweight
+  const matched = (isBodyweight || exerciseComplete)
     ? []
     : exercise.sets.filter(s => s.prev_weight != null && s.prev_reps != null);
 
@@ -741,14 +650,8 @@ function ExerciseCard({ exercise, isGroupCheckedIn, onResetCheckin, onAddSet, on
           </div>
           {exercise.equipment && <div style={{ fontSize:'0.78rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</div>}
         </div>
-        {isGroupCheckedIn && (
-          <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0, paddingTop:'2px' }}>
-            <span style={{ color:'var(--success)', fontSize:'0.85rem' }}>✓</span>
-            <button type="button" onClick={e => { e.stopPropagation(); onResetCheckin(); }}
-              style={{ background:'none', border:'none', color:'var(--dim)', fontSize:'0.75rem', cursor:'pointer', textDecoration:'underline', padding:0 }}>
-              reset
-            </button>
-          </div>
+        {exerciseComplete && (
+          <span style={{ color:'var(--success)', fontSize:'1rem', flexShrink:0, paddingTop:'2px' }}>✓</span>
         )}
       </div>
 
@@ -852,18 +755,13 @@ export default function TodayPage() {
   // - reps: string (raw input)
   const [setStatuses, setSetStatuses] = useState(new Map());
 
-  // Check-in state
-  const [checkedInGroups, setCheckedIn] = useState(new Set());
-  const [pendingCheckin, setPending]    = useState(null);
-  const [dismissedGroups, setDismissed] = useState(new Set());
-
   // Finish workout
   const [reloadKey, setReloadKey]       = useState(0);
   const [finishModal, setFinishModal]   = useState(null);
   const [skipConfirm, setSkipConfirm]   = useState(false);
-  // One-shot flag: when set, the next loadSlot skips preDismiss (signalling
-  // "user explicitly clicked Finish, don't silence the check-in modals").
-  const skipPreDismissOnceRef = useRef(false);
+  // Guards the one-shot "workout just completed" side effects (calendar
+  // refresh, end-of-plan modal) so they don't re-fire every render.
+  const completionHandledRef = useRef(false);
 
   // Per-exercise bodyweight input (propagates forward to subsequent BW exercises)
   const [bodyweightValues, setBodyweightValues] = useState(new Map());
@@ -911,11 +809,9 @@ export default function TodayPage() {
     async function loadSlot() {
       setSessLoading(true);
       setSetStatuses(new Map());
-      setCheckedIn(new Set());
-      setPending(null);
-      setDismissed(new Set());
       setDragExId(null);
       setDragOverId(null);
+      completionHandledRef.current = false;
 
       const { weekNum, dow } = selectedSlot;
       const [slotData, exs] = await Promise.all([
@@ -945,12 +841,8 @@ export default function TodayPage() {
         }
       }
 
-      const checkinSet = new Set();
       if (sess) {
-        const [loggedSets, checkinGroups] = await Promise.all([
-          api.getSessionSets(sess.id),
-          api.getCheckins(sess.id),
-        ]);
+        const loggedSets = await api.getSessionSets(sess.id);
         for (const ls of loggedSets) {
           const key = `${ls.exercise_id}-${ls.set_num}`;
           const cur = statuses.get(key) ?? { status: 'idle', weight: '', reps: '' };
@@ -963,33 +855,6 @@ export default function TodayPage() {
             statuses.set(key, { status: 'logged', weight: dispWeight, reps: String(ls.reps_done) });
           }
         }
-        for (const g of checkinGroups) checkinSet.add(g);
-      }
-
-      // Pre-dismiss groups that are already fully done. Two cases:
-      //   - Past (non-current) slots: never pop modals on read-only views.
-      //   - Unlocked sessions: the user explicitly unlocked to edit something,
-      //     not to redo every check-in. Modals should only fire after they
-      //     touch a set (handleLog / handleClear remove the group from
-      //     dismissedGroups, so re-completing the group re-fires the modal).
-      // Exception: if the user just clicked Finish Workout, they've explicitly
-      // committed to the check-in flow — don't silence anything this reload.
-      const skipPreDismiss = skipPreDismissOnceRef.current;
-      skipPreDismissOnceRef.current = false;
-      const shouldPreDismiss = !skipPreDismiss && (!is_current || sess?.unlocked === 1);
-      const preDismissed = new Set();
-      if (shouldPreDismiss) {
-        for (const g of groupByMuscle(exs)) {
-          if (!checkinSet.has(g.muscle_group)) {
-            const allDone = g.exercises.every(ex =>
-              ex.sets.every(s => {
-                const st = statuses.get(`${ex.exercise_id}-${s.set_num}`);
-                return st && (st.status === 'logged' || st.status === 'skipped');
-              })
-            );
-            if (allDone) preDismissed.add(g.muscle_group);
-          }
-        }
       }
 
       const bwKey    = `ft_bodyweight_${weekNum}_${dow}`;
@@ -1000,8 +865,6 @@ export default function TodayPage() {
       }
 
       setSetStatuses(statuses);
-      setCheckedIn(checkinSet);
-      setDismissed(preDismissed);
       setBodyweightValues(bwMap);
       setSessLoading(false);
       setLoading(false);
@@ -1011,8 +874,6 @@ export default function TodayPage() {
   }, [selectedSlot?.weekNum, selectedSlot?.dow, activePlan?.id, reloadKey]); // eslint-disable-line
 
   // ── Derived state ─────────────────────────────────────────────────────────────
-
-  const groups = groupByMuscle(exercises);
 
   // Per-set status helpers — read from the lifted setStatuses Map.
   const getStatus = useCallback((exId, setNum) => {
@@ -1028,19 +889,6 @@ export default function TodayPage() {
     });
   }
 
-  function groupIsDone(group) {
-    return group.exercises.every(ex => ex.sets.every(s => {
-      const st = getStatus(ex.exercise_id, s.set_num);
-      return st.status === 'logged' || st.status === 'skipped';
-    }));
-  }
-
-  // Groups whose sets are all skipped don't need a check-in modal.
-  function groupHasLoggedSets(group) {
-    return group.exercises.some(ex =>
-      ex.sets.some(s => getStatus(ex.exercise_id, s.set_num).status === 'logged')
-    );
-  }
 
   // Week / Day label from the selected slot position
   const weekDayLabel = (() => {
@@ -1067,48 +915,32 @@ export default function TodayPage() {
     return prev.weekNum === selectedSlot.weekNum && prev.dow === selectedSlot.dow;
   })();
 
-  // A session is "all done" iff the server says so (checked_in === 1).
-  // Per-group local check-ins are tracked client-side, but the authoritative
-  // source for "complete" is the server flag, refreshed via setReloadKey when
-  // all groups requiring a check-in are checked in.
-  const allDone = session?.checked_in === 1;
+  // A session is "all done" once every scheduled set is logged or skipped.
+  // The server marks checked_in automatically as sets are logged; the client
+  // derives the same condition so the done state shows without a reload.
+  const allDone = exercises.length > 0 && exercises.every(ex =>
+    ex.sets.every(s => {
+      const st = getStatus(ex.exercise_id, s.set_num);
+      return st.status === 'logged' || st.status === 'skipped';
+    })
+  );
 
-  // ── Auto-trigger check-in ─────────────────────────────────────────────────────
+  // ── Workout-completion side effects ───────────────────────────────────────────
+  // When the last set is logged the algorithm has already run server-side
+  // (per-exercise, on every set change). Here we just refresh the calendar so
+  // the slot advances, and surface the end-of-plan modal — once per session.
 
   useEffect(() => {
-    if (pendingCheckin !== null || sessLoading) return;
-    const next = groups.find(g =>
-      groupIsDone(g) &&
-      !checkedInGroups.has(g.muscle_group) &&
-      !dismissedGroups.has(g.muscle_group) &&
-      groupHasLoggedSets(g)
-    );
-    if (next) setPending(next.muscle_group);
-  }, [setStatuses, pendingCheckin, checkedInGroups, dismissedGroups, sessLoading]); // eslint-disable-line
+    if (sessLoading || isReadOnly || !allDone || completionHandledRef.current) return;
+    completionHandledRef.current = true;
+    if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData).catch(() => {});
+    const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
+    const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
+    if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow)
+      setEndOfPlanModal(true);
+  }, [allDone, sessLoading, isReadOnly]); // eslint-disable-line
 
   // ── Per-set actions ───────────────────────────────────────────────────────────
-
-  // Reset a group's server-side check-in. Used when the user edits or unticks
-  // a logged set in a group that was already checked in.
-  async function resetGroupCheckinIfAny(muscleGroup) {
-    if (!session?.id) return;
-    if (!checkedInGroups.has(muscleGroup)) return;
-    await api.resetCheckin(session.id, muscleGroup).catch(() => {});
-    setCheckedIn(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
-    setDismissed(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
-  }
-
-  // Remove a group from dismissedGroups when the user actively logs / clears.
-  // Needed so that after an unlock (where loadSlot pre-dismisses every group),
-  // re-completing a group re-fires its check-in modal.
-  function markGroupActive(muscleGroup) {
-    setDismissed(prev => {
-      if (!prev.has(muscleGroup)) return prev;
-      const n = new Set(prev);
-      n.delete(muscleGroup);
-      return n;
-    });
-  }
 
   async function handleLog(exId, setNum) {
     if (!session?.id || isReadOnly) return;
@@ -1123,9 +955,9 @@ export default function TodayPage() {
     const weightKg = isBW
       ? (bwStr !== '' && bwStr != null ? toKg(parseFloat(bwStr)) : 0)
       : (cur.weight !== '' ? toKg(parseFloat(cur.weight)) : (set?.weight ?? 0));
-    // Optimistic flip
+    // Optimistic flip. The server re-derives next-session targets the moment
+    // this lands — no check-in step.
     patchStatus(exId, setNum, { status: 'logged' });
-    markGroupActive(ex.muscle_group);
     try {
       await api.logSet(session.id, { exercise_id: exId, set_num: setNum, reps_done: repsDone, skipped: 0, weight_used: weightKg });
     } catch {
@@ -1135,13 +967,7 @@ export default function TodayPage() {
 
   async function handleClear(exId, setNum) {
     if (!session?.id || isReadOnly) return;
-    const ex = exercises.find(e => e.exercise_id === exId);
-    // Optimistic
     patchStatus(exId, setNum, { status: 'idle' });
-    if (ex) {
-      markGroupActive(ex.muscle_group);
-      await resetGroupCheckinIfAny(ex.muscle_group);
-    }
     api.unlogSet(session.id, exId, setNum).catch(() => {});
   }
 
@@ -1166,47 +992,6 @@ export default function TodayPage() {
     const cur = getStatus(exId, setNum);
     if (cur.status === 'logged') handleClear(exId, setNum);
   }
-
-  // ── Check-in callbacks ────────────────────────────────────────────────────────
-
-  const onCheckin = useCallback((muscleGroup) => {
-    setCheckedIn(prev => new Set([...prev, muscleGroup]));
-    setPending(null);
-    if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
-
-    // Reload the slot only when the session is genuinely complete: every
-    // scheduled exercise logged/skipped AND every group needing a check-in
-    // has one. This mirrors the server's completion rule — reloading earlier
-    // would re-read a still-in-progress session and reset live state.
-    const updatedGroups = new Set([...checkedInGroups, muscleGroup]);
-    const groupsNeedingCheckin = groups.filter(groupHasLoggedSets);
-    const sessionComplete =
-      groups.every(groupIsDone) &&
-      groupsNeedingCheckin.every(g => updatedGroups.has(g.muscle_group));
-    if (sessionComplete) {
-      const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
-      const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
-      if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow) {
-        setEndOfPlanModal(true);
-      }
-      setReloadKey(k => k + 1);
-    }
-  }, [activePlan, groups, checkedInGroups, calendarData, selectedSlot, setStatuses]);
-
-  function handleClosePending() {
-    setDismissed(prev => new Set([...prev, pendingCheckin]));
-    setPending(null);
-  }
-
-  const onResetCheckin = useCallback(async (muscleGroup) => {
-    if (!session?.id) return;
-    await api.resetCheckin(session.id, muscleGroup);
-    setCheckedIn(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
-    setDismissed(prev => { const n = new Set(prev); n.delete(muscleGroup); return n; });
-    // Don't untick the group's individual sets — they remain logged on the
-    // server. The auto-checkin effect will simply re-fire the modal so the
-    // user can submit fresh feedback.
-  }, [session]);
 
   // ── Drag reorder ──────────────────────────────────────────────────────────────
 
@@ -1319,13 +1104,14 @@ export default function TodayPage() {
       }
       return n;
     });
-    setDismissed(prev => new Set([...prev, ...exercises.map(ex => ex.muscle_group)]));
-    setPending(null);
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData);
     setReloadKey(k => k + 1);
   }
 
   // ── Finish workout ────────────────────────────────────────────────────────────
+  // Bulk-commits every still-unlogged set: those with a weight + reps entered
+  // are logged, the rest are skipped. The server re-derives targets per
+  // exercise as each set lands.
 
   function handleFinishWorkout() {
     const toLog = [], toSkip = [];
@@ -1348,30 +1134,18 @@ export default function TodayPage() {
         }
       }
     }
-    if (toLog.length === 0 && toSkip.length === 0) {
-      // Everything is already logged/skipped. Reload so check-in state is
-      // re-read from the server (the authoritative source) before re-firing
-      // modals — this avoids re-prompting groups that are in fact checked in
-      // but which a failed/stale client update dropped from checkedInGroups.
-      setDismissed(new Set());
-      skipPreDismissOnceRef.current = true;
-      setReloadKey(k => k + 1);
-      return;
-    }
+    if (toLog.length === 0 && toSkip.length === 0) return; // nothing left to do
     setFinishModal({ toLog, toSkip });
   }
 
   async function handleConfirmFinish() {
     const { toLog, toSkip } = finishModal;
+    // Throws on failure → FinishConfirmModal surfaces it and keeps the modal open.
     await Promise.all([
       ...toLog.map(item => api.logSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: item.reps, skipped: 0, weight_used: item.weightKg })),
       ...toSkip.map(item => api.logSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: null, skipped: 1, weight_used: null })),
     ]);
     setFinishModal(null);
-    // Clear dismissed locally and tell the next loadSlot not to re-apply
-    // preDismiss (e.g., on an unlocked session) — user explicitly committed.
-    setDismissed(new Set());
-    skipPreDismissOnceRef.current = true;
     setReloadKey(k => k + 1);
   }
 
@@ -1450,8 +1224,6 @@ export default function TodayPage() {
             <ExerciseCard
               key={`${session?.id ?? `${selectedSlot?.weekNum}-${selectedSlot?.dow}`}-${ex.exercise_id}`}
               exercise={ex}
-              isGroupCheckedIn={checkedInGroups.has(ex.muscle_group)}
-              onResetCheckin={() => onResetCheckin(ex.muscle_group)}
               onAddSet={() => onAddSet(ex.exercise_id)}
               onRemoveSet={() => onRemoveSet(ex.exercise_id)}
               isDragOver={dragOverId === ex.exercise_id}
@@ -1496,15 +1268,6 @@ export default function TodayPage() {
             </div>
           ) : null}
         </>
-      )}
-
-      {pendingCheckin && (
-        <CheckinModal
-          sessionId={session?.id}
-          muscleGroup={pendingCheckin}
-          onCheckin={onCheckin}
-          onClose={handleClosePending}
-        />
       )}
 
       {skipConfirm && (
