@@ -699,8 +699,17 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect='move'; onDragOver(); }}
       onDrop={e => { e.preventDefault(); onDrop(); }}
       onDragEnd={onDragEnd}
-      style={{ border:`1px solid ${isDragOver ? 'var(--muted)' : 'var(--border)'}`, borderRadius:'10px', padding:'1rem', marginBottom:'0.75rem', background: isDragOver ? 'var(--surface2)' : 'var(--surface)', transition:'border-color 0.1s, background 0.1s' }}
+      style={{ position:'relative', border:`1px solid ${isDragOver ? 'var(--muted)' : 'var(--border)'}`, borderRadius:'10px', padding:'1rem', marginTop:'1rem', marginBottom:'0.75rem', background: isDragOver ? 'var(--surface2)' : 'var(--surface)', transition:'border-color 0.1s, background 0.1s' }}
     >
+      {/* Muscle-group tab — straddles the card's top edge, aligned to the
+          left edge of the weight-input column. */}
+      <div style={{ position:'absolute', top:'-12px', left:'1rem', display:'inline-flex', alignItems:'center', gap:'5px',
+        background:'var(--surface3)', border:`1px solid ${mcColor(exercise.muscle_group)}66`, borderRadius:'6px', padding:'3px 9px' }}>
+        <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
+          {[7,10,7].map((h,i) => <div key={i} style={{ width:'2.5px', height:`${h}px`, background:mcColor(exercise.muscle_group), borderRadius:'2px' }} />)}
+        </div>
+        <span style={{ fontSize:'0.66rem', fontWeight:'700', letterSpacing:'0.1em', textTransform:'uppercase', color:mcColor(exercise.muscle_group) }}>{exercise.muscle_group}</span>
+      </div>
       <div style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.8rem', cursor:'grab', userSelect:'none' }}>
         <span style={{ color:'var(--dim)', fontSize:'1rem', marginTop:'6px', flexShrink:0, letterSpacing:'-1px' }}>⠿</span>
         <div style={{ flex:1, minWidth:0 }}>
@@ -721,24 +730,20 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
                   ✎
                 </button>
               )}
+              {exercise.pause_weight === 1 && (
+                <button type="button" onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
+                  style={{ ...iconBtn, borderColor:'#e0a030', color:'#e0a030', fontSize:'1.05rem', lineHeight:1 }}
+                  title="Weight is paused — tap to resume weight progression">
+                  ⏸
+                </button>
+              )}
             </div>
           </div>
-          {/* Row 2 — meta line, left-packed in a fixed order: muscle group,
-              then equipment, then (if set) the pause state. */}
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginTop:'8px' }}>
-            <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
-            {exercise.equipment && <span style={{ fontSize:'0.75rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</span>}
-            {exercise.pause_weight === 1 && (
-              <button type="button"
-                onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
-                title="Weight is paused — tap to resume weight progression"
-                style={{ display:'inline-flex', alignItems:'center', gap:'5px', flexShrink:0,
-                  background:'var(--surface2)', border:'1px solid #6b5320', borderRadius:'6px',
-                  padding:'3px 8px', fontSize:'0.72rem', fontWeight:'600', color:'#e0a030', cursor:'pointer' }}>
-                ⏸ Weight paused
-              </button>
-            )}
-          </div>
+          {exercise.equipment && (
+            <div style={{ fontSize:'0.75rem', color:'var(--dim)', textTransform:'capitalize', marginTop:'7px' }}>
+              {exercise.equipment}
+            </div>
+          )}
         </div>
       </div>
 
