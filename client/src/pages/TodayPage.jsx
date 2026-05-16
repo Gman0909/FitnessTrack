@@ -357,6 +357,46 @@ function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
   );
 }
 
+// ── Resume-weight confirm modal ───────────────────────────────────────────────
+
+function ResumeWeightModal({ exerciseName, onConfirm, onCancel }) {
+  const [busy, setBusy]   = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handle() {
+    setBusy(true);
+    setError(null);
+    try { await onConfirm(); }
+    catch { setBusy(false); setError('Could not save. Check your connection and try again.'); }
+  }
+
+  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
+  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'400px', display:'flex', flexDirection:'column', gap:'1rem', border:'1px solid var(--border)' };
+
+  return (
+    <div style={overlay} onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div style={box}>
+        <h3 style={{ margin:0, color:'var(--text)', fontSize:'1.1rem', fontWeight:'700' }}>Resume weight progression?</h3>
+        <p style={{ margin:0, color:'var(--muted)', fontSize:'0.875rem', lineHeight:1.5 }}>
+          <strong style={{ color:'var(--text)' }}>{exerciseName}</strong> will start adding
+          weight again once you hit the top of its rep range — from your next session onward.
+        </p>
+        {error && <p style={{ margin:0, color:'var(--danger)', fontSize:'0.85rem' }}>{error}</p>}
+        <div style={{ display:'flex', gap:'0.5rem' }}>
+          <button type="button" onClick={onCancel} disabled={busy}
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
+            Cancel
+          </button>
+          <button type="button" onClick={handle} disabled={busy}
+            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor:'pointer' }}>
+            {busy ? 'Saving…' : error ? 'Retry' : 'Resume'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Set row ────────────────────────────────────────────────────────────────────
 
 // Controlled component — status / weight / reps are owned by the parent
@@ -584,7 +624,7 @@ function ExerciseHistoryModal({ exercise, onClose }) {
 
 // ── Exercise card ──────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
+function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
   const { unit } = useUnit();
   const [historyOpen, setHistoryOpen] = useState(false);
   const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
@@ -681,6 +721,16 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, isDragOver, onD
             <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
           </div>
           {exercise.equipment && <div style={{ fontSize:'0.78rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</div>}
+          {exercise.pause_weight === 1 && (
+            <button type="button"
+              onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
+              title="Weight is paused — tap to resume weight progression"
+              style={{ marginTop:'5px', display:'inline-flex', alignItems:'center', gap:'5px',
+                background:'var(--surface2)', border:'1px solid #6b5320', borderRadius:'6px',
+                padding:'3px 8px', fontSize:'0.72rem', fontWeight:'600', color:'#e0a030', cursor:'pointer' }}>
+              ⏸ Weight paused
+            </button>
+          )}
         </div>
         {exerciseComplete && (
           <span style={{ color:'var(--success)', fontSize:'1rem', flexShrink:0, paddingTop:'2px' }}>✓</span>
@@ -792,6 +842,7 @@ export default function TodayPage() {
   const [finishModal, setFinishModal]   = useState(null);
   const [skipConfirm, setSkipConfirm]   = useState(false);
   const [editingExercise, setEditingExercise] = useState(null);
+  const [unpausing, setUnpausing] = useState(null);
   // Guards the one-shot "workout just completed" side effects (calendar
   // refresh, end-of-plan modal) so they don't re-fire every render.
   const completionHandledRef = useRef(false);
@@ -1260,6 +1311,7 @@ export default function TodayPage() {
               onAddSet={() => onAddSet(ex.exercise_id)}
               onRemoveSet={() => onRemoveSet(ex.exercise_id)}
               onEdit={() => setEditingExercise(ex)}
+              onResumeWeight={() => setUnpausing(ex)}
               isDragOver={dragOverId === ex.exercise_id}
               onDragStart={() => setDragExId(ex.exercise_id)}
               onDragOver={() => { if (dragExerciseId && dragExerciseId !== ex.exercise_id) setDragOverId(ex.exercise_id); }}
@@ -1321,10 +1373,23 @@ export default function TodayPage() {
             default_increment: editingExercise.default_increment,
             rep_min: editingExercise.rep_min,
             rep_max: editingExercise.rep_max,
+            pause_weight: editingExercise.pause_weight,
           }}
           slot={{ planId: editingExercise.plan_id, scheduleId: editingExercise.schedule_id, setCount: editingExercise.set_count }}
           onSaved={() => { setEditingExercise(null); setReloadKey(k => k + 1); }}
           onClose={() => setEditingExercise(null)}
+        />
+      )}
+
+      {unpausing && (
+        <ResumeWeightModal
+          exerciseName={unpausing.name}
+          onConfirm={async () => {
+            await api.updateExercise(unpausing.exercise_id, { pause_weight: 0 });
+            setUnpausing(null);
+            setReloadKey(k => k + 1);
+          }}
+          onCancel={() => setUnpausing(null)}
         />
       )}
 

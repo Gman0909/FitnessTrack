@@ -233,9 +233,9 @@ if (!cols('exercises').includes('rep_max'))
   db.exec('ALTER TABLE exercises ADD COLUMN rep_max INTEGER NOT NULL DEFAULT 12');
 
 // Per-user overrides of an exercise's training parameters (rep range, weight
-// increment). NULL columns fall through to the exercises-table default. The
-// range/increment that suits one lifter may not suit another, so these are
-// personal; name/muscle group/equipment stay shared.
+// increment, pause-weight flag). rep_min/rep_max/default_increment fall through
+// to the exercises-table default when NULL. pause_weight, when 1, freezes the
+// weight — progression then comes from reps and added sets only.
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_exercise_settings (
     user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -243,9 +243,12 @@ db.exec(`
     rep_min           INTEGER,
     rep_max           INTEGER,
     default_increment REAL,
+    pause_weight      INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, exercise_id)
   )
 `);
+if (!cols('user_exercise_settings').includes('pause_weight'))
+  db.exec('ALTER TABLE user_exercise_settings ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
 
 // Clear stale dates on currently-blank, never-finalized sessions. Earlier
 // versions stamped session.date at slot-creation time (when the user merely

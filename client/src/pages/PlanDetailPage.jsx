@@ -375,6 +375,7 @@ function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
             default_increment: editSlot.default_increment,
             rep_min: editSlot.rep_min,
             rep_max: editSlot.rep_max,
+            pause_weight: editSlot.pause_weight,
           }}
           slot={{ planId, scheduleId: editSlot.id, setCount: editSlot.set_count }}
           onSaved={() => { setEditSlot(null); onRefresh(); }}

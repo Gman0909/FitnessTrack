@@ -21,6 +21,7 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
   const [repMin, setRepMin] = useState(String(exercise.rep_min ?? 8));
   const [repMax, setRepMax] = useState(String(exercise.rep_max ?? 12));
   const [sets,   setSets]   = useState(slot?.setCount ?? null);
+  const [pause,  setPause]  = useState(!!exercise.pause_weight);
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
 
@@ -36,6 +37,7 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
       await api.updateExercise(exercise.id, {
         name: name.trim(), muscle_group: mg, equipment: equip,
         default_increment: parseFloat(incr) || 2.5, rep_min: mn, rep_max: mx,
+        pause_weight: pause ? 1 : 0,
       });
       if (slot && sets !== slot.setCount)
         await api.updatePlanSlot(slot.planId, slot.scheduleId, { set_count: sets });
@@ -116,9 +118,30 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
           <span style={{ fontSize: '0.8rem', color: 'var(--dim)' }}>kg</span>
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text)' }}>Pause weight increases</span>
+            <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: 'var(--dim)', lineHeight: 1.45 }}>
+              Freeze the load — progress by reps, then added sets. For limited
+              plates or injury recovery.
+            </p>
+          </div>
+          <button type="button" onClick={() => setPause(p => !p)}
+            aria-pressed={pause}
+            style={{
+              flexShrink: 0, minWidth: '64px', minHeight: '38px', padding: '0 0.9rem',
+              border: `1px solid ${pause ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px',
+              background: pause ? 'var(--btn)' : 'var(--surface)',
+              color: pause ? 'var(--btn-text)' : 'var(--text)',
+              fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer',
+            }}>
+            {pause ? 'On' : 'Off'}
+          </button>
+        </div>
+
         <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dim)', lineHeight: 1.5 }}>
-          Rep range, weight increment and set count are personal to you. Name,
-          muscle group and equipment are shared across accounts.
+          Rep range, weight increment, pause and set count are personal to you.
+          Name, muscle group and equipment are shared across accounts.
         </p>
 
         {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}

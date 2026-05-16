@@ -32,7 +32,8 @@ router.get('/today', (req, res) => {
            e.id as exercise_id, e.name, e.muscle_group, e.equipment,
            COALESCE(ues.default_increment, e.default_increment) AS default_increment,
            COALESCE(ues.rep_min, e.rep_min) AS rep_min,
-           COALESCE(ues.rep_max, e.rep_max) AS rep_max
+           COALESCE(ues.rep_max, e.rep_max) AS rep_max,
+           COALESCE(ues.pause_weight, 0)    AS pause_weight
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.day_of_week = ? AND s.plan_id = ?

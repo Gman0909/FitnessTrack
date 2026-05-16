@@ -28,12 +28,15 @@ function recomputeExercise(session, exerciseId) {
     SELECT s.set_count, e.equipment,
            COALESCE(ues.default_increment, e.default_increment) AS default_increment,
            COALESCE(ues.rep_min, e.rep_min) AS rep_min,
-           COALESCE(ues.rep_max, e.rep_max) AS rep_max
+           COALESCE(ues.rep_max, e.rep_max) AS rep_max,
+           COALESCE(ues.pause_weight, 0)    AS pause_weight
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.plan_id IS ? AND s.day_of_week = ? AND s.exercise_id = ?
   `).get(session.user_id, planId, session.session_dow, exerciseId);
   if (!sched) return;
+  // Reps-only when the exercise is bodyweight or the user has paused its weight.
+  const repsOnly = sched.equipment === 'bodyweight' || sched.pause_weight === 1;
 
   const sessionDateStr = session.date ?? todayStr();
   const nextDayStr = addDay(sessionDateStr);
@@ -76,6 +79,7 @@ function recomputeExercise(session, exerciseId) {
   const nextTargets = nextExerciseTargets(setData, {
     repMin: sched.rep_min, repMax: sched.rep_max,
     increment: sched.default_increment ?? 2.5, equipment: sched.equipment,
+    pauseWeight: repsOnly,
   });
 
   const writeTarget = db.prepare(
@@ -85,16 +89,18 @@ function recomputeExercise(session, exerciseId) {
     writeTarget.run(exerciseId, t.set_num, t.weight ?? 0, t.reps, nextDayStr, planId);
   }
 
-  // Bodyweight double progression: when every set reached the rep ceiling,
-  // add a set (cap 6) — the weight axis is unavailable, so volume grows by sets.
-  if (sched.equipment === 'bodyweight' && sched.set_count < 6) {
+  // Reps-only double progression: when every set reached the rep ceiling, add
+  // a set (cap 6) — with no weight axis, volume grows by sets. Applies to
+  // bodyweight and to weight-paused exercises alike. The new set inherits the
+  // last set's weight (0 for bodyweight, the working load for a paused lift).
+  if (repsOnly && sched.set_count < 6) {
     const allAtCeiling = setData.every(s =>
       s.logged && !s.logged.skipped && s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max
     );
     if (allAtCeiling) {
       db.prepare('UPDATE schedule SET set_count = set_count + 1 WHERE plan_id IS ? AND day_of_week = ? AND exercise_id = ?')
         .run(planId, session.session_dow, exerciseId);
-      writeTarget.run(exerciseId, sched.set_count + 1, 0, sched.rep_min, nextDayStr, planId);
+      writeTarget.run(exerciseId, sched.set_count + 1, nextTargets.at(-1)?.weight ?? 0, sched.rep_min, nextDayStr, planId);
     }
   }
 }

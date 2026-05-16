@@ -18,6 +18,7 @@ function getPlanSlots(planId, userId) {
            COALESCE(ues.default_increment, e.default_increment) AS default_increment,
            COALESCE(ues.rep_min, e.rep_min) AS rep_min,
            COALESCE(ues.rep_max, e.rep_max) AS rep_max,
+           COALESCE(ues.pause_weight, 0)    AS pause_weight,
            (SELECT st.weight FROM set_targets st
             WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
               AND st.plan_id IS s.plan_id
