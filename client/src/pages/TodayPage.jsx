@@ -701,12 +701,16 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
       onDragEnd={onDragEnd}
       style={{ border:`1px solid ${isDragOver ? 'var(--muted)' : 'var(--border)'}`, borderRadius:'10px', padding:'1rem', marginBottom:'0.75rem', background: isDragOver ? 'var(--surface2)' : 'var(--surface)', transition:'border-color 0.1s, background 0.1s' }}
     >
-      <div style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.85rem', cursor:'grab', userSelect:'none' }}>
-        <span style={{ color:'var(--dim)', fontSize:'1rem', marginTop:'3px', flexShrink:0, letterSpacing:'-1px' }}>⠿</span>
-        <div style={{ flex:1 }}>
-          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px', marginBottom:'5px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-              <span style={{ fontWeight:'600', fontSize:'1.05rem', color:'var(--text)' }}>{exercise.name}</span>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.8rem', cursor:'grab', userSelect:'none' }}>
+        <span style={{ color:'var(--dim)', fontSize:'1rem', marginTop:'6px', flexShrink:0, letterSpacing:'-1px' }}>⠿</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          {/* Row 1 — name (own line, wraps freely) + action buttons */}
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px' }}>
+            <span style={{ fontWeight:'600', fontSize:'1.05rem', color:'var(--text)', lineHeight:1.3, minWidth:0 }}>
+              {exercise.name}
+              {exerciseComplete && <span style={{ color:'var(--success)', marginLeft:'6px' }}>✓</span>}
+            </span>
+            <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
               <button type="button" onClick={e => { e.stopPropagation(); setHistoryOpen(true); }}
                 style={iconBtn} title="View history">
                 <HistoryIcon />
@@ -718,25 +722,25 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
                 </button>
               )}
             </div>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px', flexShrink:0 }}>
-              <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
-              {exercise.pause_weight === 1 && (
-                <button type="button"
-                  onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
-                  title="Weight is paused — tap to resume weight progression"
-                  style={{ display:'inline-flex', alignItems:'center', gap:'5px',
-                    background:'var(--surface2)', border:'1px solid #6b5320', borderRadius:'6px',
-                    padding:'3px 8px', fontSize:'0.72rem', fontWeight:'600', color:'#e0a030', cursor:'pointer' }}>
-                  ⏸ Weight paused
-                </button>
-              )}
-            </div>
           </div>
-          {exercise.equipment && <div style={{ fontSize:'0.78rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</div>}
+          {/* Row 2 — muscle group + equipment, with the pause state on the right */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap', marginTop:'8px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', minWidth:0 }}>
+              <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
+              {exercise.equipment && <span style={{ fontSize:'0.75rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</span>}
+            </div>
+            {exercise.pause_weight === 1 && (
+              <button type="button"
+                onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
+                title="Weight is paused — tap to resume weight progression"
+                style={{ display:'inline-flex', alignItems:'center', gap:'5px', flexShrink:0,
+                  background:'var(--surface2)', border:'1px solid #6b5320', borderRadius:'6px',
+                  padding:'3px 8px', fontSize:'0.72rem', fontWeight:'600', color:'#e0a030', cursor:'pointer' }}>
+                ⏸ Weight paused
+              </button>
+            )}
+          </div>
         </div>
-        {exerciseComplete && (
-          <span style={{ color:'var(--success)', fontSize:'1rem', flexShrink:0, paddingTop:'2px' }}>✓</span>
-        )}
       </div>
 
       {isBodyweight && (() => {
