@@ -732,9 +732,12 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
               )}
               {exercise.pause_weight === 1 && (
                 <button type="button" onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
-                  style={{ ...iconBtn, borderColor:'#e0a030', color:'#e0a030', fontSize:'1.05rem', lineHeight:1 }}
+                  style={{ ...iconBtn, borderColor:'#e0a030', color:'#e0a030' }}
                   title="Weight is paused — tap to resume weight progression">
-                  ⏸
+                  <span style={{ display:'inline-flex', gap:'3px' }}>
+                    <span style={{ width:'3px', height:'13px', background:'currentColor', borderRadius:'1.5px' }} />
+                    <span style={{ width:'3px', height:'13px', background:'currentColor', borderRadius:'1.5px' }} />
+                  </span>
                 </button>
               )}
             </div>
