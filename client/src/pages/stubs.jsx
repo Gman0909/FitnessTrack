@@ -3,6 +3,8 @@ import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
 
+const ALL_EQUIPMENT = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+
 // ── Setup Page ────────────────────────────────────────────────────────────────
 
 export function SetupPage() {
