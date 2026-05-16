@@ -704,7 +704,7 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
       <div style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.85rem', cursor:'grab', userSelect:'none' }}>
         <span style={{ color:'var(--dim)', fontSize:'1rem', marginTop:'3px', flexShrink:0, letterSpacing:'-1px' }}>⠿</span>
         <div style={{ flex:1 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'5px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px', marginBottom:'5px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span style={{ fontWeight:'600', fontSize:'1.05rem', color:'var(--text)' }}>{exercise.name}</span>
               <button type="button" onClick={e => { e.stopPropagation(); setHistoryOpen(true); }}
@@ -718,19 +718,21 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
                 </button>
               )}
             </div>
-            <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px', flexShrink:0 }}>
+              <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
+              {exercise.pause_weight === 1 && (
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
+                  title="Weight is paused — tap to resume weight progression"
+                  style={{ display:'inline-flex', alignItems:'center', gap:'5px',
+                    background:'var(--surface2)', border:'1px solid #6b5320', borderRadius:'6px',
+                    padding:'3px 8px', fontSize:'0.72rem', fontWeight:'600', color:'#e0a030', cursor:'pointer' }}>
+                  ⏸ Weight paused
+                </button>
+              )}
+            </div>
           </div>
           {exercise.equipment && <div style={{ fontSize:'0.78rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</div>}
-          {exercise.pause_weight === 1 && (
-            <button type="button"
-              onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
-              title="Weight is paused — tap to resume weight progression"
-              style={{ marginTop:'5px', display:'inline-flex', alignItems:'center', gap:'5px',
-                background:'var(--surface2)', border:'1px solid #6b5320', borderRadius:'6px',
-                padding:'3px 8px', fontSize:'0.72rem', fontWeight:'600', color:'#e0a030', cursor:'pointer' }}>
-              ⏸ Weight paused
-            </button>
-          )}
         </div>
         {exerciseComplete && (
           <span style={{ color:'var(--success)', fontSize:'1rem', flexShrink:0, paddingTop:'2px' }}>✓</span>
