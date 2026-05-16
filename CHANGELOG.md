@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0] - 2026-05-16
+
+### Changed
+- **Dynamic double progression** replaces the subjective check-in system. Progression is purely performance-based: each set is its own track — reps climb toward the rep-range ceiling, then weight increases and reps reset to the floor. The pain / recovery / pump / intensity check-in modals are gone; logging a set immediately re-derives the next session's targets.
+- **Rep ranges are per exercise** (`rep_min`/`rep_max`) and editable, rather than a fixed global range.
+- **Exercise properties are editable inline** — an edit (✎) button on each exercise card and plan row opens a shared editor for name, muscle group, equipment, increment, rep range, set count and pause state.
+- **Exercise card redesign** — the muscle-group badge is now a tab straddling the card's top edge; the name gets its own row so long names no longer crowd the action buttons.
+
+### Added
+- **Pause weight increases** — a per-exercise setting that freezes the load and progresses through reps and added sets only (for limited plates or injury recovery). Surfaced as an orange pause icon on the card; tap to resume.
+- **Per-user exercise overrides** — rep range, weight increment and pause state are stored per user, so one account's tuning doesn't affect another's.
+- **Volume / weight toggle** in the exercise history chart.
+- **Bodyweight Bests** — bodyweight exercises now have their own Personal Bests list ranked by max reps, instead of dominating the weight-ranked list with their logged bodyweight.
+
+### Fixed
+- Setup page rendered a blank screen due to an undefined `ALL_EQUIPMENT` reference.
+- Algorithm now bootstraps from the first logged session; legacy `is_suggestion` rows are never used as targets.
+- Per-set performance glyphs no longer show on first-time sets with no prior history.
+- History modal Peak/Latest values rounded to 0.1 precision.
+- Data reset also wipes legacy null-user plans and fully orphaned set targets.
+
+### Security
+- Route ownership checks, rate limiting, HTTPS-only auth cookie, and an N+1 query fix.
+
+---
+
 ## [1.2.0] - 2026-05-02
 
 ### Changed
