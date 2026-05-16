@@ -723,12 +723,11 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
               )}
             </div>
           </div>
-          {/* Row 2 — muscle group + equipment, with the pause state on the right */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap', marginTop:'8px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'8px', minWidth:0 }}>
-              <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
-              {exercise.equipment && <span style={{ fontSize:'0.75rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</span>}
-            </div>
+          {/* Row 2 — meta line, left-packed in a fixed order: muscle group,
+              then equipment, then (if set) the pause state. */}
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginTop:'8px' }}>
+            <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
+            {exercise.equipment && <span style={{ fontSize:'0.75rem', color:'var(--dim)', textTransform:'capitalize' }}>{exercise.equipment}</span>}
             {exercise.pause_weight === 1 && (
               <button type="button"
                 onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
