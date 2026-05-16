@@ -168,7 +168,7 @@ export function StatsPage() {
     api.getExerciseHistory(selEx.exercise_id).then(setExHistory);
   }, [selEx]);
 
-  const { overview, weekly_volume = [], session_volume = [], muscle_volume = [], personal_bests = [], top_exercises = [] } = stats ?? {};
+  const { overview, weekly_volume = [], session_volume = [], muscle_volume = [], personal_bests = [], bodyweight_bests = [], top_exercises = [] } = stats ?? {};
 
   const volScale = unit === 'lbs' ? 2.2046 : 1;
   const volUnit  = unit === 'lbs' ? 'lbs' : 'kg';
@@ -328,7 +328,7 @@ export function StatsPage() {
         </>}
       </>}
 
-      {/* Personal bests */}
+      {/* Personal bests — weighted exercises */}
       {personal_bests.length > 0 && <>
         <Section title="Personal Bests" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
@@ -338,6 +338,22 @@ export function StatsPage() {
               <span style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text)' }}>{pb.name}</span>
               <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
                 {display(pb.max_weight)} × {pb.reps_done}
+              </span>
+            </div>
+          ))}
+        </div>
+      </>}
+
+      {/* Personal bests — bodyweight exercises, ranked by reps */}
+      {bodyweight_bests.length > 0 && <>
+        <Section title="Bodyweight Bests" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+          {bodyweight_bests.map(pb => (
+            <div key={pb.exercise_id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: MG_COLOR[pb.muscle_group] ?? '#888', flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text)' }}>{pb.name}</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                {pb.max_reps} reps
               </span>
             </div>
           ))}

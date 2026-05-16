@@ -68,6 +68,10 @@ router.get('/', (req, res) => {
     GROUP BY e.muscle_group ORDER BY volume DESC
   `).all(...P);
 
+  // Weighted exercises — best is the heaviest weight ever logged. Bodyweight
+  // exercises are excluded here: their logged "weight" is just the user's
+  // bodyweight, which would always rank them at the top. They get a separate
+  // list below, ranked by reps (the real record for a bodyweight movement).
   const personal_bests = db.prepare(`
     SELECT e.id AS exercise_id, e.name, e.muscle_group,
            ls.weight_used AS max_weight, ls.reps_done
@@ -75,6 +79,7 @@ router.get('/', (req, res) => {
     JOIN sessions s  ON s.id  = ls.session_id
     JOIN exercises e ON e.id  = ls.exercise_id
     WHERE ${SCOPE} AND ls.skipped = 0 AND ls.weight_used IS NOT NULL AND ls.reps_done IS NOT NULL
+      AND e.equipment != 'bodyweight'
       AND ls.weight_used = (
         SELECT MAX(ls2.weight_used)
         FROM logged_sets ls2 JOIN sessions s2 ON s2.id = ls2.session_id
@@ -83,6 +88,25 @@ router.get('/', (req, res) => {
       )
     GROUP BY ls.exercise_id
     ORDER BY max_weight DESC
+    LIMIT 20
+  `).all(...P, ...P);
+
+  const bodyweight_bests = db.prepare(`
+    SELECT e.id AS exercise_id, e.name, e.muscle_group,
+           ls.reps_done AS max_reps
+    FROM logged_sets ls
+    JOIN sessions s  ON s.id  = ls.session_id
+    JOIN exercises e ON e.id  = ls.exercise_id
+    WHERE ${SCOPE} AND ls.skipped = 0 AND ls.reps_done IS NOT NULL
+      AND e.equipment = 'bodyweight'
+      AND ls.reps_done = (
+        SELECT MAX(ls2.reps_done)
+        FROM logged_sets ls2 JOIN sessions s2 ON s2.id = ls2.session_id
+        WHERE ls2.exercise_id = ls.exercise_id AND ${SCOPE2}
+          AND ls2.skipped = 0 AND ls2.reps_done IS NOT NULL
+      )
+    GROUP BY ls.exercise_id
+    ORDER BY max_reps DESC
     LIMIT 20
   `).all(...P, ...P);
 
@@ -98,7 +122,7 @@ router.get('/', (req, res) => {
     LIMIT 10
   `).all(...P);
 
-  res.json({ overview: { ...ov, avg_per_week }, weekly_volume, session_volume, muscle_volume, personal_bests, top_exercises });
+  res.json({ overview: { ...ov, avg_per_week }, weekly_volume, session_volume, muscle_volume, personal_bests, bodyweight_bests, top_exercises });
 });
 
 router.get('/export', (req, res) => {
