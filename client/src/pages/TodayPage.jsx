@@ -1261,7 +1261,7 @@ export default function TodayPage() {
   return (
     <div>
       {/* ── Header ── */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1.85rem' }}>
         <div>
           {weekDayLabel && (
             <div style={{ fontSize:'0.7rem', fontWeight:'700', letterSpacing:'0.14em', color:'var(--dim)', textTransform:'uppercase', marginBottom:'2px' }}>
