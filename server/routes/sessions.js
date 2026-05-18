@@ -118,6 +118,10 @@ function updateCompletion(session) {
   const sched = db.prepare(
     'SELECT exercise_id, set_count FROM schedule WHERE plan_id IS ? AND day_of_week = ?'
   ).all(planId, session.session_dow);
+  // The appended set is always the last one (set_num = set_count): it carries
+  // only a future-dated target and is not logged in this session. A set the
+  // user actually logged — even one added to the plan only recently, whose
+  // first target is therefore future-dated — must never be excluded.
   const isFutureOnlySet = db.prepare(`
     SELECT 1 FROM set_targets t
     WHERE t.exercise_id = ? AND t.set_num = ? AND t.plan_id IS ? AND t.valid_from > ?
@@ -127,11 +131,14 @@ function updateCompletion(session) {
           AND t2.plan_id IS t.plan_id AND t2.valid_from <= ?)
     LIMIT 1
   `);
+  const isLoggedHere = db.prepare(
+    'SELECT 1 FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ? LIMIT 1'
+  );
   let expected = 0;
   for (const row of sched) {
     expected += row.set_count;
-    // An appended set is always the last one (set_num = set_count).
-    if (isFutureOnlySet.get(row.exercise_id, row.set_count, planId, sessDate, sessDate))
+    if (!isLoggedHere.get(session.id, row.exercise_id, row.set_count)
+        && isFutureOnlySet.get(row.exercise_id, row.set_count, planId, sessDate, sessDate))
       expected -= 1;
   }
 
