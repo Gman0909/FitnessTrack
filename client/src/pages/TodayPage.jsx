@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
+import { weightAdjustedTarget } from '../../../shared/algorithm.js';
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtShort(dateStr) {
@@ -404,10 +405,12 @@ function ResumeWeightModal({ exerciseName, onConfirm, onCancel }) {
 // state, no refs, no liveValues. This eliminates stale-state-after-reload bugs.
 function SetRow({
   set, isBodyweight, bodyweightStr, isReadOnly,
-  status, weight, reps,
+  status, weight, reps, repMin, repMax,
   onWeightChange, onRepsChange, onClickTick, onClickUndo,
 }) {
-  const { unit } = useUnit();
+  const { unit, toKg } = useUnit();
+  // Weight last committed (on blur) for the deviation re-targeting below.
+  const [evalWeight, setEvalWeight] = useState(weight);
 
   const pill = { display:'flex', alignItems:'center', justifyContent:'center', background:'var(--input-bg)', border:'1px solid var(--border)', borderRadius:'8px', height:'42px', fontSize:'1rem', fontWeight:'500' };
 
@@ -442,12 +445,25 @@ function SetRow({
   const inputsLocked = isReadOnly || isLogged;
   const lockedStyle  = isLogged ? { ...inputStyle, cursor: 'not-allowed' } : inputStyle;
 
-  // Actual-vs-target glyph: how the logged reps compared to the set's target.
-  // Suppressed on first-time sets — with no prior logged performance the
-  // "target" is just the rep-range floor, so beat/met/missed is meaningless.
+  // Weight-deviation rep target. When the loaded weight differs from the
+  // recommendation, the rep target re-derives to preserve volume (±15% band);
+  // beyond the band there is no comparable target, shown as "?". Re-evaluated
+  // when the weight cell loses focus, or from the logged weight once set is in.
+  const effWeight  = isLogged ? weight : evalWeight;
+  const adj = (!isBodyweight && set.weight != null && effWeight !== '' && effWeight != null)
+    ? weightAdjustedTarget({ weight: set.weight, reps: set.reps }, toKg(parseFloat(effWeight)), { repMin, repMax })
+    : null;
+  const outOfBand  = adj != null && !adj.inBand;
+  const targetReps = (adj && adj.inBand) ? adj.reps : set.reps;
+
+  // Actual-vs-target glyph: how the logged reps compared to the (weight-
+  // adjusted) target. Suppressed on first-time sets — with no prior logged
+  // performance the "target" is just the rep-range floor — and when the weight
+  // deviation is beyond the band, where no comparable target applies.
   const loggedReps = parseInt(reps, 10);
-  const perf = isLogged && Number.isFinite(loggedReps) && set.reps != null && set.prev_reps != null
-    ? (loggedReps > set.reps ? 'up' : loggedReps === set.reps ? 'met' : 'down')
+  const perf = isLogged && !outOfBand && Number.isFinite(loggedReps)
+      && targetReps != null && set.prev_reps != null
+    ? (loggedReps > targetReps ? 'up' : loggedReps === targetReps ? 'met' : 'down')
     : null;
   const perfGlyph = { up: '▲', met: '=', down: '▼' };
   const perfColor = { up: 'var(--success)', met: 'var(--dim)', down: 'var(--danger)' };
@@ -457,6 +473,7 @@ function SetRow({
       {!isBodyweight && (
         <input type="number" value={weight} onChange={e => onWeightChange(e.target.value)}
           onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
+          onBlur={() => setEvalWeight(weight)}
           placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
           disabled={inputsLocked}
           style={lockedStyle}
@@ -465,12 +482,12 @@ function SetRow({
       <div style={{ position:'relative' }}>
         <input type="number" value={reps} onChange={e => onRepsChange(e.target.value)}
           onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
-          placeholder={set.reps != null ? String(set.reps) : 'reps'} min="1" max="999"
+          placeholder={outOfBand ? '?' : (targetReps != null ? String(targetReps) : 'reps')} min="1" max="999"
           disabled={inputsLocked}
           style={{ ...lockedStyle, width:'100%' }}
         />
         {perf && (
-          <span title={`Target ${set.reps}`}
+          <span title={`Target ${targetReps}`}
             style={{ position:'absolute', right:'7px', top:'50%', transform:'translateY(-50%)',
               fontSize:'0.8rem', fontWeight:700, color: perfColor[perf], pointerEvents:'none' }}>
             {perfGlyph[perf]}
@@ -786,6 +803,8 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
             status={st.status}
             weight={st.weight}
             reps={st.reps}
+            repMin={exercise.rep_min}
+            repMax={exercise.rep_max}
             onWeightChange={(val) => onWeightChange(exercise.exercise_id, set.set_num, val)}
             onRepsChange={(val) => onRepsChange(exercise.exercise_id, set.set_num, val)}
             onClickTick={() => onClickTick(exercise.exercise_id, set.set_num)}

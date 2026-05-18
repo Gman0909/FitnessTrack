@@ -104,6 +104,7 @@ Each set is its own progression track, comparing the user's actual logged reps t
 - Rep range `[repMin, repMax]` is per exercise (`exercises.rep_min/rep_max`).
 - **Bodyweight**: reps-only axis; reps climb toward `repMax` and hold there. When every set reaches `repMax`, `recomputeExercise` adds a set (cap 6).
 - `setPerformance(targetReps, actualReps)` → `'up' | 'met' | 'down'` for the UI's per-set glyph.
+- **Weight-deviation re-targeting** — `weightAdjustedTarget(target, actualWeight, {repMin,repMax})`. When the logged/entered weight differs from the target's, the rep target is re-scaled to roughly preserve volume (`round(targetReps × targetWeight / actualWeight)`, clamped to the rep range). Within a ±15% band (`WEIGHT_BAND`) this adjusted target drives the hold-vs-climb decision and the UI glyph; beyond it `{inBand:false}` — the client shows `?` and suppresses the glyph, and progression climbs target-free from the logged performance. The client (`TodayPage` `SetRow`) re-evaluates on weight-cell blur.
 
 ## Session lifecycle
 
