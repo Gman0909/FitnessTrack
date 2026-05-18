@@ -68,7 +68,8 @@ client/src/
 - `exercises` — exercise library; `muscle_group`, `equipment`, `default_increment`, `rep_min`/`rep_max` (per-exercise rep range), `is_custom`
 - `workout_plans` — named plans per user; `is_active` (one active at a time), `week_count`, `started_at`
 - `plan_days` — which days of week (0=Mon…6=Sun) belong to a plan
-- `schedule` — exercises per plan per day; `set_count`, `position` for ordering
+- `schedule` — exercises per plan per day; `set_count` (a live mirror of the latest `set_counts` value), `position` for ordering
+- `set_counts` — date-versioned set count per `(plan_id, day_of_week, exercise_id)`; append-only, `valid_from`. The effective count for a session is the latest row valid as of the session's date. A manual +/− set records `valid_from = today`; an algorithm-appended set records `valid_from = session.date + 1`. Resolve via `effectiveSetCount()` in `server/setCounts.js` — never read `schedule.set_count` directly for a session
 - `set_targets` — target weight + reps per exercise per set; `valid_from` date + `plan_id`; the algorithm writes a new row per completed exercise. `is_suggestion` is a legacy flag (no longer written)
 - `sessions` — identified by `(plan_id, week_num, session_dow, user_id)` UNIQUE; `checked_in` (= "complete"), `unlocked` flags
 - `logged_sets` — actual logged weight/reps per set; `skipped` flag; `reps_done` NULL when skipped
@@ -77,7 +78,8 @@ client/src/
 
 - `day_of_week` is **0=Monday … 6=Sunday** throughout (not JS convention where 0=Sunday)
 - Logging a set re-runs progression for that exercise: the server writes the next-session `set_targets` rows with `valid_from = session.date + 1 day`
-- `set_targets` is append-only — never update, always insert a new row
+- `set_targets` and `set_counts` are append-only — never update, always insert a new row
+- Set-count changes propagate forward only: a completed session always resolves to the count it had, never one added later
 - Sessions are position-based (week_num, session_dow), not date-based
 - `slotDone(s)` — the key predicate used in `sessions.js` and `plans.js`: `s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets))`. **All callers must use identical logic** or the current-slot calculation diverges.
 
