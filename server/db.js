@@ -250,6 +250,38 @@ db.exec(`
 if (!cols('user_exercise_settings').includes('pause_weight'))
   db.exec('ALTER TABLE user_exercise_settings ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
 
+// ── Date-versioned set counts ─────────────────────────────────────────────────
+// schedule.set_count is a single shared scalar per (plan, day, exercise), so
+// any change to it — a manual +/- set or the algorithm appending a set when a
+// reps-only exercise hits its ceiling — applied retroactively to every week,
+// including already-completed sessions. set_counts records the count with a
+// valid_from date (mirroring set_targets); the effective count for a session
+// is the latest row valid as of that session's date. schedule.set_count is
+// kept as a live mirror of the most recent value.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS set_counts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id     INTEGER REFERENCES workout_plans(id) ON DELETE CASCADE,
+    day_of_week INTEGER NOT NULL,
+    exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    set_count   INTEGER NOT NULL,
+    valid_from  TEXT    NOT NULL
+  )
+`);
+// Backfill: every schedule row gets a baseline row dated far in the past, so
+// existing and completed sessions resolve to exactly their current count.
+// Idempotent — only inserts for schedule rows that have no set_counts row yet.
+db.prepare(`
+  INSERT INTO set_counts (plan_id, day_of_week, exercise_id, set_count, valid_from)
+  SELECT s.plan_id, s.day_of_week, s.exercise_id, s.set_count, '1970-01-01'
+  FROM schedule s
+  WHERE NOT EXISTS (
+    SELECT 1 FROM set_counts sc
+    WHERE sc.plan_id IS s.plan_id AND sc.day_of_week = s.day_of_week
+      AND sc.exercise_id = s.exercise_id
+  )
+`).run();
+
 // Clear stale dates on currently-blank, never-finalized sessions. Earlier
 // versions stamped session.date at slot-creation time (when the user merely
 // navigated to the slot). The new rule is: blank sessions have NULL date and

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db.js';
 import { nextExerciseTargets } from '../../shared/algorithm.js';
 import { slotDone } from '../../shared/slotDone.js';
+import { effectiveSetCount, recordSetCount, clearSetCountAt } from '../setCounts.js';
 
 const router = Router();
 
@@ -40,20 +41,25 @@ function recomputeExercise(session, exerciseId) {
 
   const sessionDateStr = session.date ?? todayStr();
   const nextDayStr = addDay(sessionDateStr);
+  // Set count for THIS session — the count valid as of its date, never a set
+  // appended for a later one.
+  const setCount = effectiveSetCount(planId, session.session_dow, exerciseId, sessionDateStr, sched.set_count);
 
   const logged = db.prepare(
     'SELECT set_num, weight_used, reps_done, skipped FROM logged_sets WHERE session_id = ? AND exercise_id = ?'
   ).all(session.id, exerciseId);
   const loggedBySet = new Map(logged.map(l => [l.set_num, l]));
 
-  // Drop this exercise's previously-written next targets; rewrite below only
-  // if the exercise is (still) complete. Keeps re-logging idempotent.
+  // Drop this exercise's previously-written next-session targets and any set
+  // it appended; rewritten below only if the exercise is (still) complete.
+  // Keeps re-logging idempotent.
   db.prepare(
     'DELETE FROM set_targets WHERE exercise_id = ? AND plan_id IS ? AND valid_from = ? AND is_suggestion = 0'
   ).run(exerciseId, planId, nextDayStr);
+  clearSetCountAt(planId, session.session_dow, exerciseId, nextDayStr);
 
   let complete = true;
-  for (let i = 1; i <= sched.set_count; i++) {
+  for (let i = 1; i <= setCount; i++) {
     const l = loggedBySet.get(i);
     if (!l || (!l.skipped && l.reps_done == null)) { complete = false; break; }
   }
@@ -67,7 +73,7 @@ function recomputeExercise(session, exerciseId) {
     ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
   `);
   const setData = [];
-  for (let i = 1; i <= sched.set_count; i++) {
+  for (let i = 1; i <= setCount; i++) {
     const exp = getExpected.get(exerciseId, i, planId, sessionDateStr);
     setData.push({
       set_num: i,
@@ -93,14 +99,15 @@ function recomputeExercise(session, exerciseId) {
   // a set (cap 6) — with no weight axis, volume grows by sets. Applies to
   // bodyweight and to weight-paused exercises alike. The new set inherits the
   // last set's weight (0 for bodyweight, the working load for a paused lift).
-  if (repsOnly && sched.set_count < 6) {
+  // The added set is recorded against the NEXT session's date, so it never
+  // appears in the session that earned it.
+  if (repsOnly && setCount < 6) {
     const allAtCeiling = setData.every(s =>
       s.logged && !s.logged.skipped && s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max
     );
     if (allAtCeiling) {
-      db.prepare('UPDATE schedule SET set_count = set_count + 1 WHERE plan_id IS ? AND day_of_week = ? AND exercise_id = ?')
-        .run(planId, session.session_dow, exerciseId);
-      writeTarget.run(exerciseId, sched.set_count + 1, nextTargets.at(-1)?.weight ?? 0, sched.rep_min, nextDayStr, planId);
+      recordSetCount(planId, session.session_dow, exerciseId, setCount + 1, nextDayStr);
+      writeTarget.run(exerciseId, setCount + 1, nextTargets.at(-1)?.weight ?? 0, sched.rep_min, nextDayStr, planId);
     }
   }
 }
@@ -110,37 +117,15 @@ function updateCompletion(session) {
   const planId   = session.plan_id ?? null;
   const sessDate = session.date ?? todayStr();
 
-  // Reps-only progression (a bodyweight or weight-paused exercise reaching the
-  // rep ceiling) appends a set to the shared schedule for the NEXT session.
-  // That set has only a future-dated target and no logged set here, so it must
-  // not count against THIS session's completion — otherwise finishing every
-  // real set still leaves the session one short and it never checks in.
+  // Expected sets = the count effective for this session's date, per exercise.
+  // A set the algorithm appended for a later session has a future valid_from
+  // and is excluded automatically — it never counts against this session.
   const sched = db.prepare(
     'SELECT exercise_id, set_count FROM schedule WHERE plan_id IS ? AND day_of_week = ?'
   ).all(planId, session.session_dow);
-  // The appended set is always the last one (set_num = set_count): it carries
-  // only a future-dated target and is not logged in this session. A set the
-  // user actually logged — even one added to the plan only recently, whose
-  // first target is therefore future-dated — must never be excluded.
-  const isFutureOnlySet = db.prepare(`
-    SELECT 1 FROM set_targets t
-    WHERE t.exercise_id = ? AND t.set_num = ? AND t.plan_id IS ? AND t.valid_from > ?
-      AND NOT EXISTS (
-        SELECT 1 FROM set_targets t2
-        WHERE t2.exercise_id = t.exercise_id AND t2.set_num = t.set_num
-          AND t2.plan_id IS t.plan_id AND t2.valid_from <= ?)
-    LIMIT 1
-  `);
-  const isLoggedHere = db.prepare(
-    'SELECT 1 FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND set_num = ? LIMIT 1'
-  );
   let expected = 0;
-  for (const row of sched) {
-    expected += row.set_count;
-    if (!isLoggedHere.get(session.id, row.exercise_id, row.set_count)
-        && isFutureOnlySet.get(row.exercise_id, row.set_count, planId, sessDate, sessDate))
-      expected -= 1;
-  }
+  for (const row of sched)
+    expected += effectiveSetCount(planId, session.session_dow, row.exercise_id, sessDate, row.set_count);
 
   const done = db.prepare(
     'SELECT COUNT(*) AS n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
@@ -233,6 +218,10 @@ router.post('/:id/unlock', (req, res) => {
       const nextDayStr = nextDay.toISOString().split('T')[0];
       db.prepare('DELETE FROM set_targets WHERE valid_from = ? AND plan_id IS ?')
         .run(nextDayStr, session.plan_id ?? null);
+      // Also drop any set the session appended for the next one.
+      for (const r of db.prepare('SELECT exercise_id FROM schedule WHERE plan_id IS ? AND day_of_week = ?')
+        .all(session.plan_id ?? null, session.session_dow))
+        clearSetCountAt(session.plan_id ?? null, session.session_dow, r.exercise_id, nextDayStr);
     }
     db.prepare('UPDATE sessions SET checked_in = 0, unlocked = 1 WHERE id = ?').run(session.id);
   })();
@@ -262,9 +251,11 @@ router.post('/:id/skip', (req, res) => {
         INSERT OR IGNORE INTO logged_sets (session_id, exercise_id, set_num, reps_done, skipped, weight_used)
         VALUES (?, ?, ?, NULL, 1, NULL)
       `);
-      for (const slot of slots)
-        for (let i = 1; i <= slot.set_count; i++)
+      for (const slot of slots) {
+        const n = effectiveSetCount(planId, dow, slot.exercise_id, session.date, slot.set_count);
+        for (let i = 1; i <= n; i++)
           ins.run(sessionId, slot.exercise_id, i);
+      }
     }
     // Stamp today's date if the session is blank (first activity = the skip
     // itself). Don't overwrite an existing date — if the user already logged

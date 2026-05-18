@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { effectiveSetCount } from '../setCounts.js';
 
 const router = Router();
 
@@ -93,7 +94,10 @@ router.get('/today', (req, res) => {
   `);
 
   const result = slots.map(slot => {
-    const sets = Array.from({ length: slot.set_count }, (_, i) => {
+    // Set count effective for the viewed session's date — a set the algorithm
+    // appended for a later session is not shown on an earlier/completed one.
+    const setCount = effectiveSetCount(slot.plan_id, dayOfWeek, slot.exercise_id, viewingDate, slot.set_count);
+    const sets = Array.from({ length: setCount }, (_, i) => {
       const setNum  = i + 1;
       const target  = getCurrent.get(slot.exercise_id, setNum, slot.plan_id, viewingDate, viewingDate);
       // Suppress prev when there's no real target — comparing the 20/8 default
@@ -118,7 +122,7 @@ router.get('/today', (req, res) => {
         prev_reps:   prev?.reps     ?? null,
       };
     });
-    return { ...slot, sets };
+    return { ...slot, set_count: setCount, sets };
   });
 
   res.json(result);

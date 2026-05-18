@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { slotDone } from '../../shared/slotDone.js';
+import { recordSetCount } from '../setCounts.js';
 
 const router = Router();
+
+const todayStr = () => new Date().toISOString().split('T')[0];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -140,7 +143,11 @@ router.post('/:id/clone', (req, res) => {
     const insDay  = db.prepare('INSERT INTO plan_days (plan_id, day_of_week) VALUES (?, ?)');
     const insSlot = db.prepare('INSERT INTO schedule (plan_id, day_of_week, exercise_id, set_count, position) VALUES (?, ?, ?, ?, ?)');
     for (const { day_of_week } of srcDays) insDay.run(newId, day_of_week);
-    for (const s of srcSlots) insSlot.run(newId, s.day_of_week, s.exercise_id, s.set_count, s.position);
+    for (const s of srcSlots) {
+      insSlot.run(newId, s.day_of_week, s.exercise_id, s.set_count, s.position);
+      // Baseline the versioned count so the fresh plan's sessions resolve to it.
+      recordSetCount(newId, s.day_of_week, s.exercise_id, s.set_count, '1970-01-01');
+    }
 
     const insTarget = db.prepare(
       "INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id) VALUES (?, ?, ?, ?, date('now'), ?)"
@@ -212,6 +219,8 @@ router.post('/:id/schedule', (req, res) => {
   const { lastInsertRowid } = db.prepare(
     'INSERT INTO schedule (plan_id, day_of_week, exercise_id, set_count, position) VALUES (?, ?, ?, ?, ?)'
   ).run(req.params.id, day_of_week, exercise_id, set_count, position);
+  // Baseline the versioned count so every session of the plan resolves to it.
+  recordSetCount(Number(req.params.id), day_of_week, exercise_id, set_count, '1970-01-01');
   res.status(201).json({ id: lastInsertRowid });
 });
 
@@ -225,12 +234,26 @@ router.patch('/:id/schedule/:slotId', (req, res) => {
   if (!fields.length) return res.json({ ok: true });
   vals.push(req.params.slotId, req.params.id);
   db.prepare(`UPDATE schedule SET ${fields.join(', ')} WHERE id = ? AND plan_id = ?`).run(...vals);
+  // A manual set-count change is recorded from today forward, so it applies to
+  // the current session onward and never alters already-completed ones.
+  if (set_count !== undefined) {
+    const slot = db.prepare('SELECT day_of_week, exercise_id FROM schedule WHERE id = ?').get(req.params.slotId);
+    if (slot) recordSetCount(Number(req.params.id), slot.day_of_week, slot.exercise_id, set_count, todayStr());
+  }
   res.json({ ok: true });
 });
 
 router.delete('/:id/schedule/:slotId', (req, res) => {
   if (!ownPlan(req.params.id, req.user.id)) return res.status(404).json({ error: 'Not found' });
-  db.prepare('DELETE FROM schedule WHERE id = ? AND plan_id = ?').run(req.params.slotId, req.params.id);
+  const slot = db.prepare('SELECT day_of_week, exercise_id FROM schedule WHERE id = ? AND plan_id = ?')
+    .get(req.params.slotId, req.params.id);
+  db.transaction(() => {
+    db.prepare('DELETE FROM schedule WHERE id = ? AND plan_id = ?').run(req.params.slotId, req.params.id);
+    // Drop the slot's versioned counts so a later re-add starts clean.
+    if (slot)
+      db.prepare('DELETE FROM set_counts WHERE plan_id = ? AND day_of_week = ? AND exercise_id = ?')
+        .run(Number(req.params.id), slot.day_of_week, slot.exercise_id);
+  })();
   res.json({ ok: true });
 });
 
