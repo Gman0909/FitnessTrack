@@ -107,10 +107,34 @@ function recomputeExercise(session, exerciseId) {
 
 // Mark the session complete when the whole day's schedule is logged/skipped.
 function updateCompletion(session) {
-  const planId = session.plan_id ?? null;
-  const expected = db.prepare(
-    'SELECT COALESCE(SUM(set_count), 0) AS n FROM schedule WHERE plan_id IS ? AND day_of_week = ?'
-  ).get(planId, session.session_dow).n;
+  const planId   = session.plan_id ?? null;
+  const sessDate = session.date ?? todayStr();
+
+  // Reps-only progression (a bodyweight or weight-paused exercise reaching the
+  // rep ceiling) appends a set to the shared schedule for the NEXT session.
+  // That set has only a future-dated target and no logged set here, so it must
+  // not count against THIS session's completion — otherwise finishing every
+  // real set still leaves the session one short and it never checks in.
+  const sched = db.prepare(
+    'SELECT exercise_id, set_count FROM schedule WHERE plan_id IS ? AND day_of_week = ?'
+  ).all(planId, session.session_dow);
+  const isFutureOnlySet = db.prepare(`
+    SELECT 1 FROM set_targets t
+    WHERE t.exercise_id = ? AND t.set_num = ? AND t.plan_id IS ? AND t.valid_from > ?
+      AND NOT EXISTS (
+        SELECT 1 FROM set_targets t2
+        WHERE t2.exercise_id = t.exercise_id AND t2.set_num = t.set_num
+          AND t2.plan_id IS t.plan_id AND t2.valid_from <= ?)
+    LIMIT 1
+  `);
+  let expected = 0;
+  for (const row of sched) {
+    expected += row.set_count;
+    // An appended set is always the last one (set_num = set_count).
+    if (isFutureOnlySet.get(row.exercise_id, row.set_count, planId, sessDate, sessDate))
+      expected -= 1;
+  }
+
   const done = db.prepare(
     'SELECT COUNT(*) AS n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)'
   ).get(session.id).n;
