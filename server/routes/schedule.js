@@ -47,25 +47,21 @@ router.get('/today', (req, res) => {
   // any prior log qualifies.
   const viewingSess = weekNum != null
     ? db.prepare(
-        'SELECT id, date, checked_in FROM sessions WHERE plan_id = ? AND week_num = ? AND session_dow = ? AND user_id = ?'
+        'SELECT id, date FROM sessions WHERE plan_id = ? AND week_num = ? AND session_dow = ? AND user_id = ?'
       ).get(activePlan.id, weekNum, dayOfWeek, req.user.id)
     : null;
   const viewingDate = viewingSess?.date ?? null;
   const viewingId   = viewingSess?.id   ?? null;
 
-  // Once a session is checked in, completing it wrote the NEXT session's
-  // targets (valid_from = this session's date + 1). Viewing the completed
-  // session must show the target that applied TO it — not those later rows —
-  // or the per-set actual-vs-target glyph compares against the wrong target.
-  // Bounding the lookup by the session's own date excludes the rows it wrote.
-  // In-progress sessions get no bound: their real targets can be future-dated
-  // (the next session opened the same day a prior one finished), and they have
-  // no later rows to exclude.
-  const targetCutoff = viewingSess?.checked_in === 1 ? viewingDate : null;
-
-  // Algorithm target for the viewed session. Prefer algorithm rows over user
-  // suggestions; fall back to the suggestion only when no algorithm target has
-  // been written.
+  // Algorithm target for the viewed session: the most recent set_target valid
+  // as of that session's date. Completing an exercise writes the NEXT
+  // session's targets at valid_from = this session's date + 1 — independently
+  // of whether the whole session is checked in. Bounding the lookup by the
+  // session's own date keeps those later rows out, so the per-set
+  // actual-vs-target glyph always compares against the target the user
+  // actually trained. A blank/unvisited session has no date — viewingDate is
+  // null, the bound is skipped, and the latest target (its freshly written
+  // input) shows for the rep placeholders and the volume hint.
   const getCurrent = db.prepare(`
     SELECT weight, reps FROM set_targets
     WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
@@ -99,7 +95,7 @@ router.get('/today', (req, res) => {
   const result = slots.map(slot => {
     const sets = Array.from({ length: slot.set_count }, (_, i) => {
       const setNum  = i + 1;
-      const target  = getCurrent.get(slot.exercise_id, setNum, slot.plan_id, targetCutoff, targetCutoff);
+      const target  = getCurrent.get(slot.exercise_id, setNum, slot.plan_id, viewingDate, viewingDate);
       // Suppress prev when there's no real target — comparing the 20/8 default
       // against a stray logged set produces a misleading hint.
       const prev    = target
