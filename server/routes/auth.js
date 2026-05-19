@@ -10,7 +10,7 @@ const router = Router();
 const COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'lax',
-  secure: true,
+  secure: process.env.NODE_ENV === 'production' && process.env.SECURE_COOKIES !== 'false',
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
