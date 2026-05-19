@@ -218,6 +218,40 @@ if (!cols('sessions').includes('unlocked'))
 if (!cols('set_targets').includes('is_suggestion'))
   db.exec('ALTER TABLE set_targets ADD COLUMN is_suggestion INTEGER NOT NULL DEFAULT 0');
 
+// ── set_targets.weight nullable ───────────────────────────────────────────────
+// Earlier versions declared weight NOT NULL, forcing weight=0 when no prior
+// target existed (e.g. a set that was only ever skipped). NULL is stored
+// instead so the UI can distinguish "no recommendation yet" from a real 0 kg
+// weight. Existing 0-weight rows on non-bodyweight exercises are cleared.
+{
+  const _stW = db.prepare('PRAGMA table_info(set_targets)').all().find(c => c.name === 'weight');
+  if (_stW?.notnull === 1) {
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE set_targets_new (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercise_id   INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+        set_num       INTEGER NOT NULL,
+        weight        REAL,
+        reps          INTEGER NOT NULL,
+        valid_from    TEXT    NOT NULL,
+        plan_id       INTEGER REFERENCES workout_plans(id),
+        is_suggestion INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO set_targets_new
+             (id, exercise_id, set_num, weight, reps, valid_from, plan_id, is_suggestion)
+        SELECT st.id, st.exercise_id, st.set_num,
+               CASE WHEN st.weight = 0 AND e.equipment != 'bodyweight' THEN NULL
+                    ELSE st.weight END,
+               st.reps, st.valid_from, st.plan_id, COALESCE(st.is_suggestion, 0)
+        FROM set_targets st JOIN exercises e ON e.id = st.exercise_id;
+      DROP TABLE set_targets;
+      ALTER TABLE set_targets_new RENAME TO set_targets;
+    `);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Drop tables retired with the move to performance-based double progression:
 // session_checkins (subjective pain/recovery/pump/intensity feedback) and
 // muscle_group_settings (per-group rep range / speed — now per exercise).

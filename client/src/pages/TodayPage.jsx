@@ -658,6 +658,16 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
   // "Complete" once every set is logged or skipped.
   const exerciseComplete = exercise.sets.every(s => isSetDone(s.set_num));
 
+  // Reps-only exercises (bodyweight / weight-paused) can only grow by adding
+  // sets, capped at 6. When all sets are logged at the rep ceiling and the cap
+  // is reached, there is no further automatic progression path.
+  const repsOnly = isBodyweight || exercise.pause_weight === 1;
+  const atSetCap = repsOnly && exercise.sets.length >= 6 && exerciseComplete &&
+    exercise.sets.every(s => {
+      const st = getStatus(exercise.exercise_id, s.set_num);
+      return st.status === 'logged' && parseInt(st.reps, 10) >= exercise.rep_max;
+    });
+
   // Progressive-overload hint: arrow + % volume delta + primary weight bump +
   // total reps delta — this session's target vs the user's last logged
   // performance of this exercise. Shown only while the card is in progress;
@@ -815,7 +825,9 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
       })}
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid var(--border)' }}>
-        <span style={{ fontSize:'0.72rem', color: volumeHint ? volumeHint.color : 'var(--muted)', letterSpacing:'0.01em' }}>{volumeHint?.text ?? ''}</span>
+        <span style={{ fontSize:'0.72rem', color: atSetCap ? '#f0a030' : volumeHint ? volumeHint.color : 'var(--muted)', letterSpacing:'0.01em' }}>
+          {atSetCap ? 'Set cap reached — consider increasing the rep range or adding weight.' : (volumeHint?.text ?? '')}
+        </span>
         {!isReadOnly && (
           <div style={{ display:'flex', gap:'0.4rem' }}>
             <button type="button" onClick={onRemoveSet} disabled={exercise.sets.length <= 1 || lastSetDone}
@@ -951,7 +963,7 @@ export default function TodayPage() {
       const statuses = new Map();
       for (const ex of exs) {
         for (const s of ex.sets) {
-          const dispWeight = (ex.equipment !== 'bodyweight' && s.weight != null)
+          const dispWeight = (ex.equipment !== 'bodyweight' && s.weight != null && s.weight > 0)
             ? toDisplay(s.weight)
             : '';
           statuses.set(`${ex.exercise_id}-${s.set_num}`, { status: 'idle', weight: dispWeight, reps: '' });

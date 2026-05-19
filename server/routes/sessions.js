@@ -23,8 +23,6 @@ const addDay = dateStr => {
 // Pure performance-based: no check-ins, no subjective modifiers.
 function recomputeExercise(session, exerciseId) {
   const planId = session.plan_id ?? null;
-  // Rep range / increment are the session owner's effective values — their
-  // personal override if set, otherwise the exercise's shared default.
   const sched = db.prepare(`
     SELECT s.set_count, e.equipment,
            COALESCE(ues.default_increment, e.default_increment) AS default_increment,
@@ -36,13 +34,10 @@ function recomputeExercise(session, exerciseId) {
     WHERE s.plan_id IS ? AND s.day_of_week = ? AND s.exercise_id = ?
   `).get(session.user_id, planId, session.session_dow, exerciseId);
   if (!sched) return;
-  // Reps-only when the exercise is bodyweight or the user has paused its weight.
   const repsOnly = sched.equipment === 'bodyweight' || sched.pause_weight === 1;
 
   const sessionDateStr = session.date ?? todayStr();
   const nextDayStr = addDay(sessionDateStr);
-  // Set count for THIS session — the count valid as of its date, never a set
-  // appended for a later one.
   const setCount = effectiveSetCount(planId, session.session_dow, exerciseId, sessionDateStr, sched.set_count);
 
   const logged = db.prepare(
@@ -50,9 +45,23 @@ function recomputeExercise(session, exerciseId) {
   ).all(session.id, exerciseId);
   const loggedBySet = new Map(logged.map(l => [l.set_num, l]));
 
-  // Drop this exercise's previously-written next-session targets and any set
-  // it appended; rewritten below only if the exercise is (still) complete.
-  // Keeps re-logging idempotent.
+  // Look up expected targets BEFORE clearing them. The upper bound is
+  // nextDayStr rather than sessionDateStr so that a same-day earlier session
+  // that already completed this exercise can inform this computation — the
+  // delete below then makes this session the authoritative writer for tomorrow.
+  const getExpected = db.prepare(`
+    SELECT weight, reps FROM set_targets
+    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= ?
+    ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
+  `);
+  const expectedBySet = new Map();
+  for (let i = 1; i <= setCount; i++)
+    expectedBySet.set(i, getExpected.get(exerciseId, i, planId, nextDayStr));
+
+  // Clear previously-written next-session targets unconditionally — keeps
+  // re-logging idempotent. When two sessions share an exercise and are logged
+  // on the same calendar day, the session with the higher id (created/logged
+  // later) runs last and its targets win.
   db.prepare(
     'DELETE FROM set_targets WHERE exercise_id = ? AND plan_id IS ? AND valid_from = ? AND is_suggestion = 0'
   ).run(exerciseId, planId, nextDayStr);
@@ -65,16 +74,9 @@ function recomputeExercise(session, exerciseId) {
   }
   if (!complete) return;
 
-  // Expected target = most recent target valid as of the session date
-  // (algorithm rows preferred over the initial suggestion).
-  const getExpected = db.prepare(`
-    SELECT weight, reps FROM set_targets
-    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= ?
-    ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
-  `);
   const setData = [];
   for (let i = 1; i <= setCount; i++) {
-    const exp = getExpected.get(exerciseId, i, planId, sessionDateStr);
+    const exp = expectedBySet.get(i);
     setData.push({
       set_num: i,
       target:  exp ?? { weight: null, reps: sched.rep_min },
@@ -91,23 +93,20 @@ function recomputeExercise(session, exerciseId) {
   const writeTarget = db.prepare(
     'INSERT INTO set_targets (exercise_id, set_num, weight, reps, valid_from, plan_id, is_suggestion) VALUES (?, ?, ?, ?, ?, ?, 0)'
   );
-  for (const t of nextTargets) {
-    writeTarget.run(exerciseId, t.set_num, t.weight ?? 0, t.reps, nextDayStr, planId);
-  }
+  for (const t of nextTargets)
+    writeTarget.run(exerciseId, t.set_num, t.weight ?? null, t.reps, nextDayStr, planId);
 
-  // Reps-only double progression: when every set reached the rep ceiling, add
-  // a set (cap 6) — with no weight axis, volume grows by sets. Applies to
-  // bodyweight and to weight-paused exercises alike. The new set inherits the
-  // last set's weight (0 for bodyweight, the working load for a paused lift).
-  // The added set is recorded against the NEXT session's date, so it never
-  // appears in the session that earned it.
+  // Reps-only double progression: when every non-skipped set reached the rep
+  // ceiling, add a set (cap 6). Skipped sets are treated as neutral — they
+  // neither earn nor block the progression set.
   if (repsOnly && setCount < 6) {
     const allAtCeiling = setData.every(s =>
-      s.logged && !s.logged.skipped && s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max
+      s.logged && (s.logged.skipped ||
+        (s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max))
     );
     if (allAtCeiling) {
       recordSetCount(planId, session.session_dow, exerciseId, setCount + 1, nextDayStr);
-      writeTarget.run(exerciseId, setCount + 1, nextTargets.at(-1)?.weight ?? 0, sched.rep_min, nextDayStr, planId);
+      writeTarget.run(exerciseId, setCount + 1, nextTargets.at(-1)?.weight ?? null, sched.rep_min, nextDayStr, planId);
     }
   }
 }
@@ -206,8 +205,13 @@ router.get('/slot', (req, res) => {
 router.post('/:id/unlock', (req, res) => {
   const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
-  const expectedSets = db.prepare('SELECT COALESCE(SUM(set_count),0) as n FROM schedule WHERE plan_id IS ? AND day_of_week = ?').get(session.plan_id ?? null, session.session_dow)?.n ?? 0;
-  const doneSets     = db.prepare('SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)').get(session.id)?.n ?? 0;
+  const sessDate    = session.date ?? todayStr();
+  const schedRows   = db.prepare('SELECT exercise_id, set_count FROM schedule WHERE plan_id IS ? AND day_of_week = ?')
+    .all(session.plan_id ?? null, session.session_dow);
+  let expectedSets = 0;
+  for (const row of schedRows)
+    expectedSets += effectiveSetCount(session.plan_id ?? null, session.session_dow, row.exercise_id, sessDate, row.set_count);
+  const doneSets = db.prepare('SELECT COUNT(*) as n FROM logged_sets WHERE session_id = ? AND (skipped = 1 OR reps_done IS NOT NULL)').get(session.id)?.n ?? 0;
   const isDone = session.checked_in === 1 || (expectedSets > 0 && doneSets >= expectedSets);
   if (!isDone) return res.status(400).json({ error: 'Session is not completed' });
 

@@ -116,9 +116,10 @@ router.get('/today', (req, res) => {
         : null;
       return {
         set_num:     setNum,
-        // New exercises have no target yet — start with an empty weight and
-        // reps at the floor of the exercise's rep range.
-        weight:      target?.weight ?? null,
+        // weight=0 is treated as no recommendation (same as NULL) — covers
+        // bodyweight exercises and any legacy rows written before the nullable
+        // weight migration.
+        weight:      (target?.weight > 0) ? target.weight : null,
         reps:        target?.reps   ?? slot.rep_min,
         prev_weight: prev?.weight   ?? null,
         prev_reps:   prev?.reps     ?? null,
