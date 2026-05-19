@@ -7,13 +7,6 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-const COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production' && process.env.SECURE_COOKIES !== 'false',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
-
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -22,9 +15,13 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts, please try again later' },
 });
 
-function setToken(res, userId) {
+function cookieOpts(req) {
+  return { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 7 * 24 * 60 * 60 * 1000 };
+}
+
+function setToken(res, req, userId) {
   const token = jwt.sign({ id: userId }, jwtSecret, { expiresIn: '7d' });
-  res.cookie('token', token, COOKIE_OPTS);
+  res.cookie('token', token, cookieOpts(req));
 }
 
 function publicUser(u) {
@@ -63,7 +60,7 @@ router.post('/register', async (req, res) => {
   db.prepare('UPDATE workout_plans SET user_id = ? WHERE user_id IS NULL').run(userId);
   db.prepare('UPDATE sessions SET user_id = ? WHERE user_id IS NULL').run(userId);
 
-  setToken(res, userId);
+  setToken(res, req, userId);
   const user = db.prepare('SELECT id, username, name, glyph FROM users WHERE id = ?').get(userId);
   res.status(201).json(publicUser(user));
 });
@@ -74,12 +71,12 @@ router.post('/login', loginLimiter, async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Invalid username or password' });
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid username or password' });
-  setToken(res, user.id);
+  setToken(res, req, user.id);
   res.json(publicUser(user));
 });
 
-router.post('/logout', (_req, res) => {
-  res.clearCookie('token', COOKIE_OPTS);
+router.post('/logout', (req, res) => {
+  res.clearCookie('token', cookieOpts(req));
   res.json({ ok: true });
 });
 
