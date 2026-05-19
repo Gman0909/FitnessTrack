@@ -424,7 +424,8 @@ function SetRow({
     </div>
   );
 
-  const canLog   = !isReadOnly && (status === 'logged' || (reps !== '' && parseInt(reps, 10) >= 1));
+  const weightFilled = isBodyweight ? bodyweightStr !== '' : weight !== '';
+  const canLog   = !isReadOnly && (status === 'logged' || (weightFilled && reps !== '' && parseInt(reps, 10) >= 1));
   const isLogged = status === 'logged';
   const inputStyle = { ...pill, width:'100%', color:'var(--text)', outline:'none', textAlign:'center', padding:0,
     borderColor: isLogged ? 'var(--success)' : 'var(--border)', opacity: isReadOnly ? 0.6 : 1 };
@@ -1131,7 +1132,14 @@ export default function TodayPage() {
     const ex = exercises.find(e => e.exercise_id === exerciseId);
     if (!ex) return;
     const last   = ex.sets[ex.sets.length - 1];
-    const newSet = { set_num: ex.sets.length + 1, weight: last.weight, reps: last.reps };
+    const newNum = ex.sets.length + 1;
+    const newSet = { set_num: newNum, weight: last.weight, reps: last.reps };
+    const prevSt = getStatus(exerciseId, last.set_num);
+    setSetStatuses(prev => {
+      const n = new Map(prev);
+      n.set(`${exerciseId}-${newNum}`, { status: 'idle', weight: prevSt.weight, reps: '' });
+      return n;
+    });
     setExercises(prev => prev.map(e => e.exercise_id !== exerciseId ? e : { ...e, set_count: e.set_count + 1, sets: [...e.sets, newSet] }));
     await api.updatePlanSlot(ex.plan_id, ex.schedule_id, { set_count: ex.set_count + 1 });
   }
