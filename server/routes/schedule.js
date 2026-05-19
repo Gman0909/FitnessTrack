@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { effectiveSetCount } from '../setCounts.js';
+import { effectiveSetCount, recordSetCount } from '../setCounts.js';
+
+const todayStr = () => new Date().toISOString().split('T')[0];
 
 const router = Router();
 
@@ -140,17 +142,15 @@ router.post('/', (req, res) => {
 });
 
 router.patch('/:id', (req, res) => {
-  const slot = db.prepare('SELECT plan_id FROM schedule WHERE id = ?').get(req.params.id);
+  const slot = db.prepare('SELECT plan_id, day_of_week, exercise_id FROM schedule WHERE id = ?').get(req.params.id);
   if (!slot || !db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(slot.plan_id, req.user.id))
     return res.status(404).json({ error: 'Not found' });
   const { set_count, position, day_of_week } = req.body;
   const fields = [], values = [];
-  if (set_count   !== undefined) { fields.push('set_count = ?');   values.push(set_count); }
   if (position    !== undefined) { fields.push('position = ?');    values.push(position); }
   if (day_of_week !== undefined) { fields.push('day_of_week = ?'); values.push(day_of_week); }
-  if (!fields.length) return res.json({ ok: true });
-  values.push(req.params.id);
-  db.prepare(`UPDATE schedule SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  if (fields.length) { values.push(req.params.id); db.prepare(`UPDATE schedule SET ${fields.join(', ')} WHERE id = ?`).run(...values); }
+  if (set_count   !== undefined) recordSetCount(slot.plan_id, slot.day_of_week, slot.exercise_id, set_count, todayStr());
   res.json({ ok: true });
 });
 
