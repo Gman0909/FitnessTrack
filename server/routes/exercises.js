@@ -46,7 +46,8 @@ router.post('/', (req, res) => {
 });
 
 router.patch('/:id', (req, res) => {
-  const { name, muscle_group, equipment, default_increment, rep_min, rep_max, pause_weight, optimal_sets } = req.body;
+  const { name, muscle_group, equipment, default_increment, rep_min, rep_max, pause_weight, optimal_sets,
+          freeze_weight_kg, freeze_plan_id, freeze_set_count } = req.body;
   const exId = Number(req.params.id);
   const ex   = db.prepare('SELECT rep_min, rep_max FROM exercises WHERE id = ?').get(exId);
   if (!ex) return res.status(404).json({ error: 'Not found' });
@@ -89,6 +90,34 @@ router.patch('/:id', (req, res) => {
         pause: pause_weight === undefined ? null : (pause_weight ? 1 : 0),
         optSets: optimal_sets ?? null,
       });
+    }
+    // Freeze working weight: overwrite any future-dated set_targets with the
+    // specified weight so the next session reflects what was shown on the card,
+    // not the algorithm's progression output.
+    if (pause_weight === 1 && freeze_weight_kg != null && freeze_plan_id != null) {
+      const plan = db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(freeze_plan_id, req.user.id);
+      if (plan) {
+        const setCount = Math.max(1, parseInt(freeze_set_count, 10) || 1);
+        const today    = new Date().toISOString().split('T')[0];
+        // Remove rows the algorithm wrote for future sessions (e.g. progression
+        // bumps from the just-completed exercise) so our row is unambiguously latest.
+        db.prepare('DELETE FROM set_targets WHERE exercise_id = ? AND plan_id = ? AND valid_from > ?')
+          .run(exId, freeze_plan_id, today);
+        const getReps = db.prepare(`
+          SELECT reps FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id = ?
+          ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
+        `);
+        const uesRepMin  = db.prepare('SELECT rep_min FROM user_exercise_settings WHERE user_id = ? AND exercise_id = ?').get(req.user.id, exId)?.rep_min;
+        const fallback   = uesRepMin ?? ex.rep_min;
+        const insertTgt  = db.prepare(`
+          INSERT INTO set_targets (exercise_id, plan_id, set_num, weight, reps, valid_from, is_suggestion)
+          VALUES (?, ?, ?, ?, ?, ?, 0)
+        `);
+        for (let n = 1; n <= setCount; n++) {
+          const reps = getReps.get(exId, n, freeze_plan_id)?.reps ?? fallback;
+          insertTgt.run(exId, freeze_plan_id, n, freeze_weight_kg, reps, today);
+        }
+      }
     }
   })();
   res.json({ ok: true });

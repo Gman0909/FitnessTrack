@@ -13,7 +13,7 @@ const MUSCLE_GROUPS  = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'legs
 //   slot     : { planId, scheduleId, setCount }  — optional
 //   onSaved  : () => void   — called after a successful save
 //   onClose  : () => void
-export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
+export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClose }) {
   const [name,   setName]   = useState(exercise.name);
   const [mg,     setMg]     = useState(exercise.muscle_group);
   const [equip,  setEquip]  = useState(exercise.equipment);
@@ -45,6 +45,13 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
         pause_weight: pause ? 1 : 0,
       };
       if (optSetsChanged && optSets !== null) payload.optimal_sets = optSets;
+      // Freeze the working weight at the highest value currently shown on the
+      // card — overrides any progression the algorithm already wrote.
+      if (pause && maxWeightKg != null && slot?.planId != null) {
+        payload.freeze_weight_kg  = maxWeightKg;
+        payload.freeze_plan_id    = slot.planId;
+        payload.freeze_set_count  = slot.setCount ?? 1;
+      }
       await api.updateExercise(exercise.id, payload);
       // For weighted (non-repsOnly) exercises, optimal sets = current set count —
       // update the schedule immediately. For bodyweight/paused, the algorithm

@@ -1335,6 +1335,21 @@ export default function TodayPage() {
     setReloadKey(k => k + 1);
   }
 
+  // Max weight (kg) across all sets currently shown on the card being edited.
+  // Covers both idle (entered but unlogged) and logged weights, in display unit.
+  const editingMaxWeightKg = (() => {
+    if (!editingExercise || editingExercise.equipment === 'bodyweight') return null;
+    let max = 0;
+    for (const s of editingExercise.sets) {
+      const st  = getStatus(editingExercise.exercise_id, s.set_num);
+      const wKg = st.weight !== '' && st.weight != null
+        ? toKg(parseFloat(st.weight))
+        : (s.weight > 0 ? s.weight : 0);
+      if (wKg > max) max = wKg;
+    }
+    return max > 0 ? max : null;
+  })();
+
   // ── Render ─────────────────────────────────────────────────────────────────────
 
   if (loading) return <p style={{ color:'var(--muted)', padding:'1rem' }}>Loading…</p>;
@@ -1479,6 +1494,7 @@ export default function TodayPage() {
             optimal_sets: editingExercise.optimal_sets,
           }}
           slot={{ planId: editingExercise.plan_id, scheduleId: editingExercise.schedule_id, setCount: editingExercise.set_count }}
+          maxWeightKg={editingMaxWeightKg}
           onSaved={() => { setEditingExercise(null); setReloadKey(k => k + 1); }}
           onClose={() => setEditingExercise(null)}
         />
