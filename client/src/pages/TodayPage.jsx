@@ -903,6 +903,7 @@ export default function TodayPage() {
   // Guards the one-shot "workout just completed" side effects (calendar
   // refresh, end-of-plan modal) so they don't re-fire every render.
   const completionHandledRef = useRef(false);
+  const draftSaveEnabledRef  = useRef(false);
 
   // Per-exercise bodyweight input (propagates forward to subsequent BW exercises)
   const [bodyweightValues, setBodyweightValues] = useState(new Map());
@@ -948,6 +949,7 @@ export default function TodayPage() {
     if (!selectedSlot || !activePlan) return;
 
     async function loadSlot() {
+      draftSaveEnabledRef.current = false;
       setSessLoading(true);
       setSetStatuses(new Map());
       setDragExId(null);
@@ -998,6 +1000,20 @@ export default function TodayPage() {
         }
       }
 
+      // Overlay draft: restore unsaved weight/reps entered before last reload.
+      // Only applies to idle sets — logged/skipped entries come from the server.
+      const draftKey  = `ft_draft_${activePlan.id}_${weekNum}_${dow}`;
+      const savedDraft = JSON.parse(localStorage.getItem(draftKey) ?? 'null');
+      if (savedDraft) {
+        for (const [key, { weight, reps }] of Object.entries(savedDraft)) {
+          const cur = statuses.get(key);
+          if (cur?.status === 'idle') {
+            if (weight !== '') cur.weight = weight;
+            if (reps   !== '') cur.reps   = reps;
+          }
+        }
+      }
+
       const bwKey    = `ft_bodyweight_${weekNum}_${dow}`;
       const sessionBW = localStorage.getItem(bwKey); // slot-specific only; no global fallback
       const bwMap    = new Map();
@@ -1013,6 +1029,7 @@ export default function TodayPage() {
       }
 
       setSetStatuses(statuses);
+      draftSaveEnabledRef.current = true;
       setBodyweightValues(bwMap);
       setSessLoading(false);
       setLoading(false);
@@ -1087,6 +1104,20 @@ export default function TodayPage() {
     if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow)
       setEndOfPlanModal(true);
   }, [allDone, sessLoading, isReadOnly]); // eslint-disable-line
+
+  // Persist unsaved weight/reps so they survive a reload or slot switch.
+  // Fired on every setStatuses change; only idle sets are stored.
+  useEffect(() => {
+    if (!draftSaveEnabledRef.current || !selectedSlot || !activePlan) return;
+    const draft = {};
+    for (const [key, val] of setStatuses) {
+      if (val.status === 'idle' && (val.weight !== '' || val.reps !== ''))
+        draft[key] = { weight: val.weight, reps: val.reps };
+    }
+    const draftKey = `ft_draft_${activePlan.id}_${selectedSlot.weekNum}_${selectedSlot.dow}`;
+    if (Object.keys(draft).length > 0) localStorage.setItem(draftKey, JSON.stringify(draft));
+    else localStorage.removeItem(draftKey);
+  }, [setStatuses]); // eslint-disable-line
 
   // ── Per-set actions ───────────────────────────────────────────────────────────
 
@@ -1181,6 +1212,7 @@ export default function TodayPage() {
     const lastSt = getStatus(exerciseId, ex.sets.length);
     if (lastSt.status === 'logged' || lastSt.status === 'skipped') return;
     setExercises(prev => prev.map(e => e.exercise_id !== exerciseId ? e : { ...e, set_count: e.set_count - 1, sets: e.sets.slice(0, -1) }));
+    setSetStatuses(prev => { const n = new Map(prev); n.delete(`${exerciseId}-${ex.sets.length}`); return n; });
     await api.updatePlanSlot(ex.plan_id, ex.schedule_id, { set_count: ex.set_count - 1 });
   }
 
