@@ -999,10 +999,17 @@ export default function TodayPage() {
       }
 
       const bwKey    = `ft_bodyweight_${weekNum}_${dow}`;
-      const storedBW = localStorage.getItem(bwKey) ?? localStorage.getItem('ft_bodyweight') ?? '';
+      const sessionBW = localStorage.getItem(bwKey); // slot-specific only; no global fallback
       const bwMap    = new Map();
       for (const ex of exs) {
-        if (ex.equipment === 'bodyweight') bwMap.set(ex.exercise_id, storedBW);
+        if (ex.equipment !== 'bodyweight') continue;
+        if (sessionBW != null) {
+          bwMap.set(ex.exercise_id, sessionBW);
+        } else {
+          // Forward propagation: seed from last logged bodyweight stored in set_targets
+          const lastBW = ex.sets[0]?.weight;
+          bwMap.set(ex.exercise_id, (lastBW != null && lastBW > 0) ? toDisplay(lastBW) : '');
+        }
       }
 
       setSetStatuses(statuses);
@@ -1212,7 +1219,6 @@ export default function TodayPage() {
 
   function handleBodyweightChange(exerciseId, value) {
     if (selectedSlot) localStorage.setItem(`ft_bodyweight_${selectedSlot.weekNum}_${selectedSlot.dow}`, value);
-    localStorage.setItem('ft_bodyweight', value); // global fallback
     setBodyweightValues(prev => {
       const next = new Map(prev);
       let found = false;
