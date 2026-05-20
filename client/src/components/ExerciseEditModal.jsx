@@ -5,11 +5,11 @@ const ALL_EQUIPMENT = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
 const MUSCLE_GROUPS  = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'legs', 'core'];
 
 // Edits an exercise's library properties — name, muscle group, equipment,
-// weight increment and rep range. When `slot` is supplied (the exercise sits
-// on a plan day) the set count for that slot is editable here too.
+// weight increment, rep range, and optimal set count. When `slot` is supplied
+// (the exercise sits on a plan day) the optimal sets target is also editable.
 //
 // Props:
-//   exercise : { id, name, muscle_group, equipment, default_increment, rep_min, rep_max }
+//   exercise : { id, name, muscle_group, equipment, default_increment, rep_min, rep_max, optimal_sets }
 //   slot     : { planId, scheduleId, setCount }  — optional
 //   onSaved  : () => void   — called after a successful save
 //   onClose  : () => void
@@ -20,7 +20,11 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
   const [incr,   setIncr]   = useState(String(exercise.default_increment ?? 2.5));
   const [repMin, setRepMin] = useState(String(exercise.rep_min ?? 8));
   const [repMax, setRepMax] = useState(String(exercise.rep_max ?? 12));
-  const [sets,   setSets]   = useState(slot?.setCount ?? null);
+  // optSets: the user's chosen optimal-sets value. Initialised from the
+  // exercise's stored optimal_sets (preferred) or the slot's current count
+  // (fallback for plans whose exercises haven't been configured yet).
+  const [optSets,        setOptSets]        = useState(exercise.optimal_sets ?? slot?.setCount ?? null);
+  const [optSetsChanged, setOptSetsChanged] = useState(false);
   const [pause,  setPause]  = useState(!!exercise.pause_weight);
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
@@ -33,14 +37,20 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
     if (!canSave) { if (!rangeValid) setError('Rep max must be a whole number above rep min.'); return; }
     setSaving(true);
     setError(null);
+    const repsOnly = equip === 'bodyweight' || pause;
     try {
-      await api.updateExercise(exercise.id, {
+      const payload = {
         name: name.trim(), muscle_group: mg, equipment: equip,
         default_increment: parseFloat(incr) || 2.5, rep_min: mn, rep_max: mx,
         pause_weight: pause ? 1 : 0,
-      });
-      if (slot && sets !== slot.setCount)
-        await api.updatePlanSlot(slot.planId, slot.scheduleId, { set_count: sets });
+      };
+      if (optSetsChanged && optSets !== null) payload.optimal_sets = optSets;
+      await api.updateExercise(exercise.id, payload);
+      // For weighted (non-repsOnly) exercises, optimal sets = current set count —
+      // update the schedule immediately. For bodyweight/paused, the algorithm
+      // grows toward the new ceiling naturally; don't force the count now.
+      if (slot && optSetsChanged && optSets !== null && !repsOnly)
+        await api.updatePlanSlot(slot.planId, slot.scheduleId, { set_count: optSets });
     } catch {
       setSaving(false);
       setError('Could not save. Check your connection and try again.');
@@ -93,12 +103,18 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
 
         {slot && (
           <div>
-            <p style={label}>Default sets</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.35rem' }}>
-              {[1,2,3,4,5,6].map(n => (
-                <button key={n} onClick={() => setSets(n)} style={{ ...chip(sets === n), padding: '0.55rem 0', textAlign: 'center' }}>{n}</button>
+            <p style={label}>Optimal sets</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: '0.35rem' }}>
+              {[1,2,3,4,5,6,7,8].map(n => (
+                <button key={n} onClick={() => { setOptSets(n); setOptSetsChanged(true); }}
+                  style={{ ...chip(optSets === n), padding: '0.55rem 0', textAlign: 'center' }}>{n}</button>
               ))}
             </div>
+            {(equip === 'bodyweight' || pause) && (
+              <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: 'var(--dim)', lineHeight: 1.45 }}>
+                The algorithm grows toward this target one set at a time as you hit the rep ceiling. Changes take effect from the next completed session.
+              </p>
+            )}
           </div>
         )}
 
@@ -140,7 +156,7 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
         </div>
 
         <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dim)', lineHeight: 1.5 }}>
-          Rep range, weight increment, pause and set count are personal to you.
+          Rep range, weight increment, pause and optimal sets are personal to you.
           Name, muscle group and equipment are shared across accounts.
         </p>
 

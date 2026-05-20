@@ -659,10 +659,12 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
   const exerciseComplete = exercise.sets.every(s => isSetDone(s.set_num));
 
   // Reps-only exercises (bodyweight / weight-paused) can only grow by adding
-  // sets, capped at 6. When all sets are logged at the rep ceiling and the cap
-  // is reached, there is no further automatic progression path.
-  const repsOnly = isBodyweight || exercise.pause_weight === 1;
-  const atSetCap = repsOnly && exercise.sets.length >= 6 && exerciseComplete &&
+  // sets, up to the user's configured optimal_sets ceiling (default 6). When
+  // all sets are logged at the rep ceiling and the optimal target is reached,
+  // there is no further automatic progression path — a stall alert fires.
+  const repsOnly    = isBodyweight || exercise.pause_weight === 1;
+  const optimalSets = exercise.optimal_sets ?? 6;
+  const isStalled   = repsOnly && exercise.sets.length >= optimalSets && exerciseComplete &&
     exercise.sets.every(s => {
       const st = getStatus(exercise.exercise_id, s.set_num);
       return st.status === 'logged' && parseInt(st.reps, 10) >= exercise.rep_max;
@@ -825,8 +827,18 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
       })}
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid var(--border)' }}>
-        <span style={{ fontSize:'0.72rem', color: atSetCap ? '#f0a030' : volumeHint ? volumeHint.color : 'var(--muted)', letterSpacing:'0.01em' }}>
-          {atSetCap ? 'Set cap reached — consider increasing the rep range or adding weight.' : (volumeHint?.text ?? '')}
+        <span style={{ fontSize:'0.72rem', color: isStalled ? '#f0a030' : volumeHint ? volumeHint.color : 'var(--muted)', letterSpacing:'0.01em' }}>
+          {isStalled
+            ? <>
+                Progression stalled at optimal set target.{' '}
+                {onEdit && (
+                  <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }}
+                    style={{ background:'none', border:'none', color:'#f0a030', textDecoration:'underline', cursor:'pointer', fontSize:'0.72rem', padding:0 }}>
+                    Edit settings
+                  </button>
+                )}
+              </>
+            : (volumeHint?.text ?? '')}
         </span>
         {!isReadOnly && (
           <div style={{ display:'flex', gap:'0.4rem' }}>
@@ -1426,6 +1438,7 @@ export default function TodayPage() {
             rep_min: editingExercise.rep_min,
             rep_max: editingExercise.rep_max,
             pause_weight: editingExercise.pause_weight,
+            optimal_sets: editingExercise.optimal_sets,
           }}
           slot={{ planId: editingExercise.plan_id, scheduleId: editingExercise.schedule_id, setCount: editingExercise.set_count }}
           onSaved={() => { setEditingExercise(null); setReloadKey(k => k + 1); }}

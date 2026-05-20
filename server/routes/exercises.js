@@ -26,7 +26,8 @@ router.get('/', (req, res) => {
            COALESCE(ues.rep_min, e.rep_min)                     AS rep_min,
            COALESCE(ues.rep_max, e.rep_max)                     AS rep_max,
            COALESCE(ues.default_increment, e.default_increment) AS default_increment,
-           COALESCE(ues.pause_weight, 0)                        AS pause_weight
+           COALESCE(ues.pause_weight, 0)                        AS pause_weight,
+           ues.optimal_sets                                      AS optimal_sets
     FROM exercises e
     LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     ${where}
@@ -45,7 +46,7 @@ router.post('/', (req, res) => {
 });
 
 router.patch('/:id', (req, res) => {
-  const { name, muscle_group, equipment, default_increment, rep_min, rep_max, pause_weight } = req.body;
+  const { name, muscle_group, equipment, default_increment, rep_min, rep_max, pause_weight, optimal_sets } = req.body;
   const exId = Number(req.params.id);
   const ex   = db.prepare('SELECT rep_min, rep_max FROM exercises WHERE id = ?').get(exId);
   if (!ex) return res.status(404).json({ error: 'Not found' });
@@ -72,19 +73,21 @@ router.patch('/:id', (req, res) => {
       db.prepare(`UPDATE exercises SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
     }
     // Training parameters — personal override (NULL = fall back to default).
-    if (rep_min !== undefined || rep_max !== undefined || default_increment !== undefined || pause_weight !== undefined) {
+    if (rep_min !== undefined || rep_max !== undefined || default_increment !== undefined || pause_weight !== undefined || optimal_sets !== undefined) {
       db.prepare(`
-        INSERT INTO user_exercise_settings (user_id, exercise_id, rep_min, rep_max, default_increment, pause_weight)
-        VALUES (@u, @e, @rmin, @rmax, @inc, COALESCE(@pause, 0))
+        INSERT INTO user_exercise_settings (user_id, exercise_id, rep_min, rep_max, default_increment, pause_weight, optimal_sets)
+        VALUES (@u, @e, @rmin, @rmax, @inc, COALESCE(@pause, 0), @optSets)
         ON CONFLICT(user_id, exercise_id) DO UPDATE SET
-          rep_min           = COALESCE(@rmin,  rep_min),
-          rep_max           = COALESCE(@rmax,  rep_max),
-          default_increment = COALESCE(@inc,   default_increment),
-          pause_weight      = COALESCE(@pause, pause_weight)
+          rep_min           = COALESCE(@rmin,    rep_min),
+          rep_max           = COALESCE(@rmax,    rep_max),
+          default_increment = COALESCE(@inc,     default_increment),
+          pause_weight      = COALESCE(@pause,   pause_weight),
+          optimal_sets      = COALESCE(@optSets, optimal_sets)
       `).run({
         u: req.user.id, e: exId,
         rmin: rep_min ?? null, rmax: rep_max ?? null, inc: default_increment ?? null,
         pause: pause_weight === undefined ? null : (pause_weight ? 1 : 0),
+        optSets: optimal_sets ?? null,
       });
     }
   })();

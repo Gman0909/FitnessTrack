@@ -283,6 +283,10 @@ db.exec(`
 `);
 if (!cols('user_exercise_settings').includes('pause_weight'))
   db.exec('ALTER TABLE user_exercise_settings ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
+// Per-user ceiling for algorithm-driven set addition — the algorithm will not
+// auto-add sets beyond this value; NULL falls back to 6 (legacy hard-cap).
+if (!cols('user_exercise_settings').includes('optimal_sets'))
+  db.exec('ALTER TABLE user_exercise_settings ADD COLUMN optimal_sets INTEGER');
 
 // ── Date-versioned set counts ─────────────────────────────────────────────────
 // schedule.set_count is a single shared scalar per (plan, day, exercise), so
