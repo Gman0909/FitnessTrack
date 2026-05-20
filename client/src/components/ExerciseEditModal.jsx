@@ -104,10 +104,10 @@ export function ExerciseEditModal({ exercise, slot, onSaved, onClose }) {
         {slot && (
           <div>
             <p style={label}>Optimal sets</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: '0.35rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.35rem' }}>
               {[1,2,3,4,5,6,7,8].map(n => (
                 <button key={n} onClick={() => { setOptSets(n); setOptSetsChanged(true); }}
-                  style={{ ...chip(optSets === n), padding: '0.55rem 0', textAlign: 'center' }}>{n}</button>
+                  style={{ ...chip(optSets === n), padding: '0.6rem 0', textAlign: 'center', minHeight: '44px' }}>{n}</button>
               ))}
             </div>
             {(equip === 'bodyweight' || pause) && (

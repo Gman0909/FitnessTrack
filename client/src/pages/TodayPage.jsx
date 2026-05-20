@@ -833,7 +833,7 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
                 Progression stalled at optimal set target.{' '}
                 {onEdit && (
                   <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }}
-                    style={{ background:'none', border:'none', color:'#f0a030', textDecoration:'underline', cursor:'pointer', fontSize:'0.72rem', padding:0 }}>
+                    style={{ background:'none', border:'none', color:'#f0a030', textDecoration:'underline', cursor:'pointer', fontSize:'0.72rem', padding:'4px 2px', margin:'-4px -2px' }}>
                     Edit settings
                   </button>
                 )}
