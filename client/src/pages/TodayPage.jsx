@@ -455,7 +455,7 @@ function SetRow({
     ? weightAdjustedTarget({ weight: set.weight, reps: set.reps }, toKg(parseFloat(effWeight)), { repMin, repMax })
     : null;
   const outOfBand  = adj != null && !adj.inBand;
-  const targetReps = (adj && adj.inBand) ? adj.reps : set.reps;
+  const targetReps = (adj && adj.inBand) ? adj.reps : Math.max(repMin, Math.min(repMax, set.reps ?? repMin));
 
   // Actual-vs-target glyph: how the logged reps compared to the (weight-
   // adjusted) target. Suppressed on first-time sets — with no prior logged
@@ -684,9 +684,10 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
     let curVol = 0, prevVol = 0, curReps = 0, prevReps = 0;
     let mainSet = matched[0];
     for (const s of matched) {
-      curVol   += toDisp(s.weight) * s.reps;
+      const tgtReps = Math.max(exercise.rep_min, Math.min(exercise.rep_max, s.reps));
+      curVol   += toDisp(s.weight) * tgtReps;
       prevVol  += toDisp(s.prev_weight) * s.prev_reps;
-      curReps  += s.reps;
+      curReps  += tgtReps;
       prevReps += s.prev_reps;
       if (s.prev_weight > mainSet.prev_weight) mainSet = s;
     }
