@@ -457,15 +457,21 @@ function SetRow({
   const outOfBand  = adj != null && !adj.inBand;
   const targetReps = (adj && adj.inBand) ? adj.reps : Math.max(repMin, Math.min(repMax, set.reps ?? repMin));
 
-  // Actual-vs-target glyph: how the logged reps compared to the (weight-
-  // adjusted) target. Suppressed on first-time sets — with no prior logged
-  // performance the "target" is just the rep-range floor — and when the weight
-  // deviation is beyond the band, where no comparable target applies.
+  // Actual-vs-target glyph. Suppressed on first-time sets and out-of-band
+  // weight deviations. Within the ±15% weight band, volume (kg × reps) drives
+  // the comparison so that logging a heavier weight for the same reps correctly
+  // shows ▲ rather than =.
   const loggedReps = parseInt(reps, 10);
-  const perf = isLogged && !outOfBand && Number.isFinite(loggedReps)
-      && targetReps != null && set.prev_reps != null
-    ? (loggedReps > targetReps ? 'up' : loggedReps === targetReps ? 'met' : 'down')
-    : null;
+  let perf = null;
+  if (isLogged && !outOfBand && Number.isFinite(loggedReps) && targetReps != null && set.prev_reps != null) {
+    if (adj && adj.inBand && set.weight != null && set.weight > 0) {
+      const actualVol = toKg(parseFloat(effWeight)) * loggedReps;
+      const targetVol = set.weight * set.reps;
+      perf = actualVol > targetVol + 0.01 ? 'up' : actualVol < targetVol - 0.01 ? 'down' : 'met';
+    } else {
+      perf = loggedReps > targetReps ? 'up' : loggedReps === targetReps ? 'met' : 'down';
+    }
+  }
   const perfGlyph = { up: '▲', met: '=', down: '▼' };
   const perfColor = { up: 'var(--success)', met: 'var(--dim)', down: 'var(--danger)' };
 
