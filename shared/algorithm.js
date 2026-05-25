@@ -109,14 +109,30 @@ export function nextExerciseTargets(setData, opts = {}) {
     if (actualReps < repMin) {
       return { set_num: s.set_num, weight: Math.max(roundToHalf(baseW - incr), 0.5), reps: repMin };
     }
-    // In range: compare against the target re-scaled for the weight actually
-    // used. Hit/beat it → add a rep. Beyond the ±15% band there is no
-    // comparable target, so climb from the logged performance regardless.
+    // In range: use volume (kg×reps) to decide progress vs hold so that weight
+    // deviations are correctly accounted for — logging heavier for same reps
+    // is a beat, logging lighter for same reps is a miss, regardless of how
+    // the adjusted rep count rounds. Beyond ±15% there is no comparable target;
+    // climb from the logged performance regardless.
     const cmp = weightAdjustedTarget(t, lg.weight_used, { repMin, repMax });
-    if (!cmp.inBand || actualReps >= cmp.reps) {
+    if (!cmp.inBand) {
       return { set_num: s.set_num, weight: baseW, reps: Math.min(repMax, actualReps + 1) };
     }
-    // Fell short of the (weight-adjusted) target but stayed in range → hold.
+    if (t.weight != null && t.weight > 0 && baseW > 0) {
+      const targetVol = t.weight * t.reps;
+      const actualVol = baseW * actualReps;
+      if (actualVol >= targetVol - 0.01) {
+        return { set_num: s.set_num, weight: baseW, reps: Math.min(repMax, actualReps + 1) };
+      }
+      // Short on volume → hold. Target the reps needed at the actual weight to
+      // hit the original volume next session, giving a clear progression path.
+      const repsNeeded = Math.ceil(targetVol / baseW);
+      return { set_num: s.set_num, weight: baseW, reps: Math.max(repMin, Math.min(repMax, repsNeeded)) };
+    }
+    // No target weight (bootstrap) → fall back to rep comparison.
+    if (actualReps >= cmp.reps) {
+      return { set_num: s.set_num, weight: baseW, reps: Math.min(repMax, actualReps + 1) };
+    }
     return { set_num: s.set_num, weight: baseW, reps: cmp.reps };
   });
 }
