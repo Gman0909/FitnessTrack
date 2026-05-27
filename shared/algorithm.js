@@ -72,6 +72,9 @@ export function nextExerciseTargets(setData, opts = {}) {
   // progression then comes from reps and, at the ceiling, added sets.
   const repsOnly  = equipment === 'bodyweight' || !!opts.pauseWeight;
 
+  // Reps logged above repMax on one set spill into the next (repsOnly only).
+  // Skipped sets carry the overflow forward without consuming it.
+  let overflow = 0;
   return setData.map(s => {
     const t  = s.target;
     const lg = s.logged;
@@ -90,10 +93,12 @@ export function nextExerciseTargets(setData, opts = {}) {
       const weight = equipment === 'bodyweight'
         ? t.weight
         : (lg.weight_used ?? t.weight ?? 0);
+      const effActual = actualReps + overflow;
+      overflow = Math.max(0, effActual - repMax);
       let reps;
-      if (actualReps >= repMax)           reps = repMax;                       // ceiling — caller may add a set
-      else if (actualReps >= t.reps)      reps = Math.min(repMax, actualReps + 1);
-      else                                 reps = t.reps;                       // hold
+      if (effActual >= repMax)           reps = repMax;                       // ceiling — caller may add a set
+      else if (effActual >= t.reps)      reps = Math.min(repMax, effActual + 1);
+      else                               reps = t.reps;                       // hold
       return { set_num: s.set_num, weight, reps };
     }
 
