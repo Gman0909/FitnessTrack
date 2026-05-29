@@ -733,15 +733,26 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
         };
         const fmtR = r => `${r > 0 ? '+' : '−'}${Math.abs(r)} rep${Math.abs(r) !== 1 ? 's' : ''}`;
 
+        // Weight direction takes priority over volume direction — a weight
+        // increase always resets reps to repMin, temporarily dropping volume,
+        // but that's progression not regression. Only fall back to volume when
+        // weight is unchanged.
+        const arrow = (hasW && wDelta > 0) ? '▲'
+                    : (hasW && wDelta < 0) ? '▼'
+                    : volDelta > 0.01 ? '▲' : volDelta < -0.01 ? '▼' : '→';
+        const color = (hasW && wDelta > 0) ? 'var(--success)'
+                    : (hasW && wDelta < 0) ? 'var(--danger)'
+                    : volDelta > 0.01 ? 'var(--success)'
+                    : volDelta < -0.01 ? 'var(--danger)'
+                    : 'var(--muted)';
+
         const parts = [];
-        parts.push(`(${volDelta > 0 ? '+' : volDelta < 0 ? '−' : ''}${Math.abs(Math.round(pct))}%)`);
+        // Volume % is misleading when weight changed (reps reset makes it look
+        // negative even on a genuine weight progression), so skip it.
+        if (!hasW) parts.push(`(${volDelta > 0 ? '+' : volDelta < 0 ? '−' : ''}${Math.abs(Math.round(pct))}%)`);
         if (hasW)    parts.push(fmtW(wDelta));
         if (hasReps) parts.push(fmtR(repsDelta));
 
-        const arrow = volDelta > 0.01 ? '▲' : volDelta < -0.01 ? '▼' : '→';
-        const color = volDelta > 0.01 ? 'var(--success)'
-                    : volDelta < -0.01 ? 'var(--danger)'
-                    : 'var(--muted)';
         volumeHint = { text: `${arrow} ${parts.join(' ')}`, color };
       }
     }
