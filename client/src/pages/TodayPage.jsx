@@ -940,6 +940,11 @@ export default function TodayPage() {
   // refresh, end-of-plan modal) so they don't re-fire every render.
   const completionHandledRef = useRef(false);
   const draftSaveEnabledRef  = useRef(false);
+  // Per-set auto-fill defaults (the target weight/reps from the schedule API)
+  // captured at slot load. The draft system only persists values that differ
+  // from these — otherwise an unchanged target gets saved as a "draft" and
+  // later restores stale values when the target advances. Keyed by `${exId}-${setNum}`.
+  const slotDefaultsRef = useRef(new Map());
 
   // Per-exercise bodyweight input (propagates forward to subsequent BW exercises)
   const [bodyweightValues, setBodyweightValues] = useState(new Map());
@@ -1011,12 +1016,15 @@ export default function TodayPage() {
         ? String(parseFloat((kg * 2.2046).toFixed(1)))
         : String(kg);
       const statuses = new Map();
+      slotDefaultsRef.current = new Map();
       for (const ex of exs) {
         for (const s of ex.sets) {
           const dispWeight = (ex.equipment !== 'bodyweight' && s.weight != null && s.weight > 0)
             ? toDisplay(s.weight)
             : '';
-          statuses.set(`${ex.exercise_id}-${s.set_num}`, { status: 'idle', weight: dispWeight, reps: '' });
+          const key = `${ex.exercise_id}-${s.set_num}`;
+          statuses.set(key, { status: 'idle', weight: dispWeight, reps: '' });
+          slotDefaultsRef.current.set(key, { weight: dispWeight, reps: '' });
         }
       }
 
@@ -1038,17 +1046,27 @@ export default function TodayPage() {
 
       // Overlay draft: restore unsaved weight/reps entered before last reload.
       // Only applies to idle sets — logged/skipped entries come from the server.
-      const draftKey  = `ft_draft_${activePlan.id}_${weekNum}_${dow}`;
+      // v2 key — old v1 drafts persisted the auto-filled target weight as if
+      // it were a user edit, causing stale values to override fresh targets
+      // when the algorithm advanced between visits. Old keys are abandoned.
+      const draftKey  = `ft_draft_v2_${activePlan.id}_${weekNum}_${dow}`;
       const savedDraft = JSON.parse(localStorage.getItem(draftKey) ?? 'null');
       if (savedDraft) {
         for (const [key, { weight, reps }] of Object.entries(savedDraft)) {
           const cur = statuses.get(key);
-          if (cur?.status === 'idle') {
-            if (weight !== '') cur.weight = weight;
-            if (reps   !== '') cur.reps   = reps;
+          const def = slotDefaultsRef.current.get(key);
+          if (cur?.status === 'idle' && def) {
+            // Only restore values that diverge from the current auto-fill —
+            // an exact match means it was either the saved auto-fill itself
+            // or a user edit that the target has since caught up to. Either
+            // way, the auto-fill is already correct.
+            if (weight !== '' && weight !== def.weight) cur.weight = weight;
+            if (reps   !== '' && reps   !== def.reps)   cur.reps   = reps;
           }
         }
       }
+      // Drop the legacy v1 draft so it doesn't keep haunting future visits.
+      localStorage.removeItem(`ft_draft_${activePlan.id}_${weekNum}_${dow}`);
 
       const bwKey    = `ft_bodyweight_${weekNum}_${dow}`;
       const sessionBW = localStorage.getItem(bwKey); // slot-specific only; no global fallback
@@ -1142,15 +1160,26 @@ export default function TodayPage() {
   }, [allDone, sessLoading, isReadOnly]); // eslint-disable-line
 
   // Persist unsaved weight/reps so they survive a reload or slot switch.
-  // Fired on every setStatuses change; only idle sets are stored.
+  // Fired on every setStatuses change; only idle sets with values that DIFFER
+  // from the auto-fill default are stored — saving an unchanged target is
+  // what produced the stale-draft bug.
   useEffect(() => {
     if (!draftSaveEnabledRef.current || !selectedSlot || !activePlan) return;
     const draft = {};
     for (const [key, val] of setStatuses) {
-      if (val.status === 'idle' && (val.weight !== '' || val.reps !== ''))
-        draft[key] = { weight: val.weight, reps: val.reps };
+      if (val.status !== 'idle') continue;
+      const def = slotDefaultsRef.current.get(key);
+      if (!def) continue;
+      const wDiff = val.weight !== '' && val.weight !== def.weight;
+      const rDiff = val.reps   !== '' && val.reps   !== def.reps;
+      if (wDiff || rDiff) {
+        draft[key] = {
+          weight: wDiff ? val.weight : '',
+          reps:   rDiff ? val.reps   : '',
+        };
+      }
     }
-    const draftKey = `ft_draft_${activePlan.id}_${selectedSlot.weekNum}_${selectedSlot.dow}`;
+    const draftKey = `ft_draft_v2_${activePlan.id}_${selectedSlot.weekNum}_${selectedSlot.dow}`;
     if (Object.keys(draft).length > 0) localStorage.setItem(draftKey, JSON.stringify(draft));
     else localStorage.removeItem(draftKey);
   }, [setStatuses]); // eslint-disable-line
