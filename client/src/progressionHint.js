@@ -69,10 +69,14 @@ export function computeProgressionHint({ sets, repMin, repMax, exerciseComplete,
   // though it's progression — so the volume % is hidden only in that case. A
   // deload (weight down) or unchanged weight keeps the %; it reflects the real
   // net change, and the weight delta below makes the deload explicit.
-  const weightUp = hasW && wDelta > 0;
-  const arrow = weightUp ? '▲'
+  const weightUp   = hasW && wDelta > 0;
+  // A deload reads as caution (amber ▼), never green — even if the +1 rep nudges
+  // net volume positive, the load eased off and shouldn't look like progress.
+  const weightDown = hasW && wDelta < 0;
+  const arrow = weightUp ? '▲' : weightDown ? '▼'
               : volDelta > 0.01 ? '▲' : volDelta < -0.01 ? '▼' : '→';
   const color = weightUp ? 'var(--success)'
+              : weightDown ? '#f0a030'
               : volDelta > 0.01 ? 'var(--success)'
               : volDelta < -0.01 ? 'var(--danger)'
               : 'var(--muted)';

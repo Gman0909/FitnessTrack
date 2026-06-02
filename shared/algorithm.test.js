@@ -25,10 +25,11 @@ function assertClose(a, b, tol = 0.01, msg) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function makeSet(num, { targetW = 60, targetR = 8, loggedW = null, loggedR = null, skipped = false } = {}) {
+function makeSet(num, { targetW = 60, targetR = 8, loggedW = null, loggedR = null, skipped = false, priorFloorMiss = false } = {}) {
   return {
     set_num: num,
     target:  { weight: targetW, reps: targetR },
+    priorFloorMiss,
     logged:  loggedW !== null || loggedR !== null || skipped
       ? { weight_used: loggedW, reps_done: loggedR, skipped: skipped ? 1 : 0 }
       : null,
@@ -95,8 +96,15 @@ test('logged >= repMax → weight bump, reps reset to repMin', () => {
   assertEq(t.reps, 8);
 });
 
-test('logged < repMin → weight drop, reps reset to repMin', () => {
+test('first sub-floor session holds weight (no deload yet), reps → repMin', () => {
   const sets = [makeSet(1, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 6 })];
+  const [t] = nextExerciseTargets(sets, WEIGHTED);
+  assertEq(t.weight, 60, 'weight should hold on a single bad day');
+  assertEq(t.reps, 8);
+});
+
+test('second consecutive sub-floor session → deload', () => {
+  const sets = [makeSet(1, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 6, priorFloorMiss: true })];
   const [t] = nextExerciseTargets(sets, WEIGHTED);
   assert(t.weight < 60, `weight should drop from 60, got ${t.weight}`);
   assertEq(t.reps, 8);
@@ -171,6 +179,54 @@ test('multi-set independence: each set is its own progression track', () => {
   assertEq(targets[1].reps, 11);
   assertEq(targets[2].weight, 60);
   assertEq(targets[2].reps, 9);
+});
+
+test('P1: a later set is never prescribed heavier than an earlier set', () => {
+  // set 1 only holds/climbs (stays 24); set 2 hits the ceiling and would bump
+  // above 24 → capped to set 1's weight and parked at repMax (limiting-set wait).
+  const sets = [
+    makeSet(1, { targetW: 24, targetR: 10, loggedW: 24, loggedR: 10 }),
+    makeSet(2, { targetW: 24, targetR: 10, loggedW: 24, loggedR: 12 }),
+  ];
+  const [a, b] = nextExerciseTargets(sets, WEIGHTED);
+  assertEq(a.weight, 24);
+  assertEq(b.weight, 24, 'set 2 capped to set 1 weight');
+  assertEq(b.reps, 12, 'parked at repMax');
+});
+
+test('P1: a genuinely descending profile (set 1 heavier) is left intact', () => {
+  const sets = [
+    makeSet(1, { targetW: 60, targetR: 12, loggedW: 60, loggedR: 12 }), // bump → ~62.5
+    makeSet(2, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 10 }), // climb, stays 60
+  ];
+  const [a, b] = nextExerciseTargets(sets, WEIGHTED);
+  assert(a.weight > b.weight, 'descending (set1 heavier) is allowed');
+  assertEq(b.weight, 60);
+});
+
+// ── nextExerciseTargets — adaptive tempo (P3) ─────────────────────────────────
+
+console.log('\nnextExerciseTargets — adaptive tempo:');
+
+test('fast: in-range hit climbs +2 reps', () => {
+  const [t] = nextExerciseTargets([makeSet(1, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 10 })], { ...WEIGHTED, tempo: 'fast' });
+  assertEq(t.weight, 60);
+  assertEq(t.reps, 12); // 10 + 2, capped at repMax
+});
+
+test('fast: ceiling bump uses a larger increment than normal', () => {
+  const fast   = nextExerciseTargets([makeSet(1, { targetW: 100, targetR: 12, loggedW: 100, loggedR: 12 })], { ...WEIGHTED, tempo: 'fast' })[0];
+  const normal = nextExerciseTargets([makeSet(1, { targetW: 100, targetR: 12, loggedW: 100, loggedR: 12 })], WEIGHTED)[0];
+  assertEq(normal.weight, 102.5);
+  assert(fast.weight > normal.weight, `fast bump ${fast.weight} should exceed normal ${normal.weight}`);
+});
+
+test('slow: deload uses a smaller (micro) increment than normal', () => {
+  const opt = { targetW: 100, targetR: 10, loggedW: 100, loggedR: 6, priorFloorMiss: true };
+  const slow   = nextExerciseTargets([makeSet(1, opt)], { ...WEIGHTED, tempo: 'slow' })[0];
+  const normal = nextExerciseTargets([makeSet(1, opt)], WEIGHTED)[0];
+  assertEq(normal.weight, 97.5);
+  assert(slow.weight > normal.weight, `slow deload ${slow.weight} should be gentler than normal ${normal.weight}`);
 });
 
 // ── nextExerciseTargets — bodyweight (repsOnly) ───────────────────────────────

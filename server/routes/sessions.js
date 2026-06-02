@@ -14,6 +14,61 @@ const addDay = dateStr => {
   return d.toISOString().split('T')[0];
 };
 
+// ── History-derived progression signals ──────────────────────────────────────
+
+// Most recent logged reps for a set, from a session strictly before the given
+// one — drives the 2nd-consecutive-sub-floor deload (P2).
+const priorSetReps = db.prepare(`
+  SELECT ls.reps_done FROM logged_sets ls JOIN sessions s ON s.id = ls.session_id
+  WHERE ls.exercise_id = @ex AND ls.set_num = @set AND s.plan_id IS @plan
+    AND s.user_id = @user AND ls.skipped = 0 AND ls.reps_done IS NOT NULL
+    AND s.date IS NOT NULL AND (s.date < @date OR (s.date = @date AND s.id < @id))
+  ORDER BY s.date DESC, s.id DESC LIMIT 1
+`);
+
+const loggedForRatio = db.prepare(`
+  SELECT set_num, weight_used, reps_done FROM logged_sets
+  WHERE session_id = ? AND exercise_id = ? AND skipped = 0
+    AND reps_done IS NOT NULL AND weight_used IS NOT NULL
+`);
+const targetAsOf = db.prepare(`
+  SELECT weight, reps FROM set_targets
+  WHERE exercise_id = ? AND set_num = ? AND plan_id IS ? AND valid_from <= ?
+  ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
+`);
+// Volume ratio (logged / target) for one exercise in one past session.
+function sessionVolumeRatio(sessId, sessDate, planId, exerciseId) {
+  const logged = loggedForRatio.all(sessId, exerciseId);
+  if (!logged.length) return null;
+  let actual = 0, target = 0;
+  for (const l of logged) {
+    actual += l.weight_used * l.reps_done;
+    const t = targetAsOf.get(exerciseId, l.set_num, planId, sessDate);
+    if (t && t.weight != null && t.weight > 0) target += t.weight * t.reps;
+  }
+  return target > 0 ? actual / target : null;
+}
+
+const priorSessionsForTempo = db.prepare(`
+  SELECT DISTINCT s.id, s.date FROM sessions s
+  JOIN logged_sets ls ON ls.session_id = s.id
+  WHERE ls.exercise_id = @ex AND s.plan_id IS @plan AND s.user_id = @user
+    AND s.date IS NOT NULL AND (s.date < @date OR (s.date = @date AND s.id < @id))
+  ORDER BY s.date DESC, s.id DESC LIMIT 2
+`);
+// Objective progression tempo from the two most recent completed sessions of
+// this exercise before the current one: two straight beats → fast, two straight
+// shortfalls → slow, else normal. Bodyweight has no volume axis → always normal.
+function exerciseTempo(planId, exerciseId, userId, sessId, sessDate, repsOnly) {
+  if (repsOnly) return 'normal';
+  const prior = priorSessionsForTempo.all({ ex: exerciseId, plan: planId, user: userId, date: sessDate, id: sessId });
+  const ratios = prior.map(p => sessionVolumeRatio(p.id, p.date, planId, exerciseId)).filter(r => r != null);
+  if (ratios.length < 2) return 'normal';
+  if (ratios.every(r => r > 1.02)) return 'fast';
+  if (ratios.every(r => r < 0.98)) return 'slow';
+  return 'normal';
+}
+
 // ── Double-progression recompute ──────────────────────────────────────────────
 // Re-derives one exercise's next-session targets from how the user actually
 // performed this session. Runs whenever the exercise's logged sets change.
@@ -21,7 +76,7 @@ const addDay = dateStr => {
 //     next-session per-set targets at valid_from = session.date + 1.
 //   - Not complete → remove any targets a prior completion produced.
 // Pure performance-based: no check-ins, no subjective modifiers.
-function recomputeExercise(session, exerciseId) {
+export function recomputeExercise(session, exerciseId) {
   const planId = session.plan_id ?? null;
   const sched = db.prepare(`
     SELECT s.set_count, e.equipment,
@@ -39,6 +94,7 @@ function recomputeExercise(session, exerciseId) {
 
   const sessionDateStr = session.date ?? todayStr();
   const nextDayStr = addDay(sessionDateStr);
+  const tempo = exerciseTempo(planId, exerciseId, session.user_id, session.id, sessionDateStr, repsOnly);
   const setCount = effectiveSetCount(planId, session.session_dow, exerciseId, sessionDateStr, sched.set_count);
 
   const logged = db.prepare(
@@ -78,17 +134,19 @@ function recomputeExercise(session, exerciseId) {
   const setData = [];
   for (let i = 1; i <= setCount; i++) {
     const exp = expectedBySet.get(i);
+    const prior = priorSetReps.get({ ex: exerciseId, set: i, plan: planId, user: session.user_id, date: sessionDateStr, id: session.id });
     setData.push({
       set_num: i,
       target:  exp ?? { weight: null, reps: sched.rep_min },
       logged:  loggedBySet.get(i),
+      priorFloorMiss: prior != null && prior.reps_done < sched.rep_min,
     });
   }
 
   const nextTargets = nextExerciseTargets(setData, {
     repMin: sched.rep_min, repMax: sched.rep_max,
     increment: sched.default_increment ?? 2.5, equipment: sched.equipment,
-    pauseWeight: repsOnly,
+    pauseWeight: repsOnly, tempo,
   });
 
   const writeTarget = db.prepare(
