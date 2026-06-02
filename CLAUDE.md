@@ -49,6 +49,7 @@ client/src/
   App.jsx                    # shell, nav, auth gate, routing
   auth.jsx                   # AuthProvider + useAuth hook
   units.js                   # kg/lbs unit context
+  progressionHint.js         # pure computeProgressionHint() — overload hint text/colour (unit-tested)
   components/
     ExerciseEditModal.jsx    # shared editor: name, muscle group, equipment, increment, rep range, set count
   pages/
@@ -95,14 +96,14 @@ Each set is its own progression track, comparing the user's actual logged reps t
 |-----------|-------------|
 | `actual ≥ repMax` | weight + increment, reps → `repMin` |
 | `target ≤ actual < repMax` | reps → `min(repMax, actual + 1)`, weight unchanged |
-| `repMin ≤ actual < target` | hold (same weight + target reps) |
+| `repMin ≤ actual < target` | hold: same weight, reps → `actual` (the logged reps — must be beaten before the target advances) |
 | `actual < repMin` | weight − increment, reps → `repMin` |
 | skipped / unlogged | unchanged |
 
 - Per-set independence gives the "dynamic" pattern — the freshest set climbs and bumps weight first.
 - `increment` is the exercise's `default_increment`, capped at 10% of working weight; weights round to 0.5 kg.
 - Rep range `[repMin, repMax]` is per exercise (`exercises.rep_min/rep_max`).
-- **Bodyweight**: reps-only axis; reps climb toward `repMax` and hold there. When every set reaches `repMax`, `recomputeExercise` adds a set (cap 6).
+- **Bodyweight**: reps-only axis; reps climb toward `repMax` and hold there — a set short of its target holds at its logged reps (same rule as weighted). When every set reaches `repMax`, `recomputeExercise` adds a set (cap 6).
 - `setPerformance(targetReps, actualReps)` → `'up' | 'met' | 'down'` for the UI's per-set glyph.
 - **Weight-deviation re-targeting** — `weightAdjustedTarget(target, actualWeight, {repMin,repMax})`. When the logged/entered weight differs from the target's, the rep target is re-scaled to roughly preserve volume (`round(targetReps × targetWeight / actualWeight)`, clamped to the rep range). Within a ±15% band (`WEIGHT_BAND`) this adjusted target drives the hold-vs-climb decision and the UI glyph; beyond it `{inBand:false}` — the client shows `?` and suppresses the glyph, and progression climbs target-free from the logged performance. The client (`TodayPage` `SetRow`) re-evaluates on weight-cell blur.
 
