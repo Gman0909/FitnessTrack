@@ -23,8 +23,8 @@ test('deload on one set is surfaced (the reported bug)', () => {
       { weight: 14, reps: 8,  prev_weight: 15, prev_reps: 7  },
     ],
   });
-  assertEq(hint.text, '▲ (+2%) −1 kg +1 rep');
-  assertEq(hint.color, 'var(--success)');
+  assertEq(hint.text, '▼ (+2%) −1 kg +1 rep');
+  assertEq(hint.color, '#f0a030'); // deload reads as caution (amber), not green
 });
 
 test('uniform weight bump: hides %, shows weight + reps (unchanged behavior)', () => {
@@ -48,12 +48,12 @@ test('flat weight, reps up: shows % and reps, no weight', () => {
   assertEq(hint.color, 'var(--success)');
 });
 
-test('deload that nets negative volume: ▼, shows %, weight', () => {
+test('deload (amber) shows %, weight — caution regardless of volume sign', () => {
   const hint = computeProgressionHint({
     ...base, sets: [{ weight: 18, reps: 10, prev_weight: 20, prev_reps: 10 }],
   });
   assertEq(hint.text, '▼ (−10%) −2 kg');
-  assertEq(hint.color, 'var(--danger)');
+  assertEq(hint.color, '#f0a030');
 });
 
 test('no change → null', () => {

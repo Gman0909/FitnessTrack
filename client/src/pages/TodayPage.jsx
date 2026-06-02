@@ -432,6 +432,26 @@ function SetRow({
     borderColor: isLogged ? 'var(--success)' : 'var(--border)', opacity: isReadOnly ? 0.6 : 1 };
 
   const handleFocusSelect = e => e.target.select();
+
+  // P7: guard against typo-driven progression. A logged weight far off the
+  // target (>25%), or an implausibly high rep count, prompts a confirm before
+  // logging — only on the log action, not when un-ticking an already-logged set.
+  const logWithGuard = () => {
+    if (!isLogged) {
+      const issues = [];
+      if (!isBodyweight && set.weight > 0) {
+        const w = toKg(parseFloat(weight));
+        if (Number.isFinite(w) && w > 0 && Math.abs(w - set.weight) / set.weight >= 0.25)
+          issues.push(`weight (${weight} ${unit})`);
+      }
+      const r = parseInt(reps, 10);
+      if (Number.isFinite(r) && r > Math.max(repMax * 2, 30)) issues.push(`${r} reps`);
+      if (issues.length && !window.confirm(`That ${issues.join(' and ')} looks unusual — possible typo. Log it anyway?`))
+        return;
+    }
+    onClickTick();
+  };
+
   const handleKeyDown = e => {
     if (e.key !== 'Enter' || isReadOnly || isLogged) return;
     const repsDone = parseInt(reps, 10);
@@ -440,7 +460,7 @@ function SetRow({
     if (!weightPresent) return;
     e.preventDefault();
     e.target.blur();
-    onClickTick();
+    logWithGuard();
   };
 
   // Disable inputs once a set is logged — to edit, un-tick (✓) first.
@@ -502,7 +522,7 @@ function SetRow({
           </span>
         )}
       </div>
-      <div onClick={canLog ? onClickTick : undefined}
+      <div onClick={canLog ? logWithGuard : undefined}
         style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0,
           cursor: isReadOnly ? 'default' : canLog ? 'pointer' : 'default',
           border:`2px solid ${isLogged ? 'var(--success)' : canLog ? 'var(--muted)' : 'var(--border)'}`,
