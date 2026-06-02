@@ -21,6 +21,45 @@ Progression-algorithm overhaul — safer, self-regulating, and more honest about
 
 ---
 
+## [1.4.1] - 2026-05-29
+
+### Added
+- **Reps-only progression hint** for bodyweight exercises, plus **overflow spill** — reps logged above the ceiling on one set carry into the next.
+
+### Fixed
+- Progression now uses a **volume comparison** (weight × reps) rather than a rounded rep count, so logging heavier for the same reps registers as a beat; the per-set glyph uses the same comparison.
+- A weight increase shows a green ▲ rather than a red volume-drop arrow — a bump resets reps, which isn't a regression.
+- Draft auto-fill no longer overrides advancing targets with stale values.
+- Stale `set_targets` reps are clamped to the rep range in the hint and rep placeholder.
+
+---
+
+## [1.4.0] - 2026-05-20
+
+### Added
+- **Optimal sets** — a per-user ceiling on auto-added sets, replacing the fixed default; bodyweight progression adds sets up to this limit.
+- **Unsaved weight/reps persist to localStorage** and restore on reload, so an interrupted log isn't lost.
+
+### Fixed
+- Five algorithm edge-case fixes, with an expanded algorithm test suite and mobile layout fixes.
+- Bodyweight pre-fill now propagates forward via `set_targets` rather than global localStorage.
+- Pause-weight freeze uses the highest weight currently shown on the card.
+
+---
+
+## [1.3.1] - 2026-05-19
+
+### Added
+- **Date-versioned set counts** — set-count changes propagate forward only, so a completed session always resolves to the count it had, never one added later.
+- **Weight-deviation rep re-targeting** — when the loaded weight differs from the target, the rep target re-scales to roughly preserve volume (within a ±15% band).
+
+### Fixed
+- Per-set target/glyph timing: targets are bounded by session date (not the checked-in flag), the glyph no longer shifts after a session completes, the completion count excludes only the unlogged appended set, and a session is correctly checked in after a reps-only exercise adds a set.
+- Manual set-count changes routed through the `set_counts` table; adding a set copies the previous set's weight; logging is blocked with an empty weight.
+- Secure-cookie flag derived from the request protocol, with a `SECURE_COOKIES=false` override.
+
+---
+
 ## [1.3.0] - 2026-05-16
 
 ### Changed
