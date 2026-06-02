@@ -14,6 +14,7 @@ Runs on a Raspberry Pi, a home server, or any machine with Node.js. Your data st
 ## Features
 
 - **Dynamic double progression** — each set climbs toward its rep-range ceiling, then adds weight and resets — automatically, based purely on the reps you actually log. No subjective check-ins
+- **Self-tuning pace** — progression speeds up when you keep beating targets and slows down (with smaller weight steps) when you stall, entirely from your logged reps — no effort ratings to enter
 - **Per-exercise rep ranges** — every exercise has an editable target rep range that drives its progression; seeded by movement type
 - **Workout plans** — create named plans with configurable training days and exercises; run multiple plans (one active at a time)
 - **Calendar view** — see every workout in a grid across weeks; navigate to any past or future session
@@ -60,14 +61,14 @@ Comparing your **actual** logged reps against the **target** you were given:
 | Situation | Next session |
 |---|---|
 | Hit the top of the rep range | **Add weight** by one increment; reps reset to the bottom of the range |
-| Hit the target, still below the ceiling | **+1 rep**, same weight |
-| Fell short of the target but stayed in range | **Hold** — same weight and target, try again |
-| Couldn't reach the bottom of the range | **Ease off** — weight down one increment; reps reset to the bottom |
+| Hit the target, still below the ceiling | **+1 rep**, same weight (**+2** when you're on a hot streak — see [Adaptive tempo](#adaptive-tempo)) |
+| Fell short of the target but stayed in range | **Hold at the reps you actually logged** — same weight; you have to beat that number before the target moves up |
+| Couldn't reach the bottom of the range | **Hold and re-attempt** at the same weight; only if you miss the bottom a **second session in a row** does the weight ease off one increment |
 | Skipped | Unchanged |
 
-Because each set advances independently, your first (freshest) set tends to climb fastest and earn a weight bump before the others — the "dynamic" in dynamic double progression. Later sets settle at their own level.
+Because each set advances independently, your first (freshest) set tends to climb fastest and earn a weight bump before the others — the "dynamic" in dynamic double progression. A **descending-weight rule** keeps the profile sensible: no set is ever prescribed heavier than the set before it, so a later set that earns a bump waits at the top of its range until the earlier sets catch up, then they move together.
 
-Weight increments are the exercise's configured step, capped at 10% of the working weight and rounded to the nearest 0.5 kg.
+Weight increments are the exercise's configured step (scaled by the current [tempo](#adaptive-tempo)), capped at 10% of the working weight and rounded to the nearest 0.5 kg.
 
 ### Rep ranges
 
@@ -90,13 +91,17 @@ Each exercise carries its own rep range, seeded by movement type and editable an
 
 In session 2 the first set reached the ceiling (12) → it adds weight and resets to the floor (21 × 8), while sets 2 and 3 keep climbing reps at 20 kg. The sets are now on slightly different weights — each progressing on its own.
 
+### Adaptive tempo
+
+Progression speed self-tunes from your recent results — no input from you, no RIR sliders. Beat an exercise's targets **two sessions running** and it shifts to a **faster** tempo: reps climb +2 at a time and weight bumps take a bigger step. Fall short **two sessions running** and it shifts **slower**: weight changes shrink to the smallest step, so you thread through a sticking point instead of bouncing off it. Otherwise it runs at the normal +1 pace. The signal is purely objective — your logged volume (weight × reps) versus the target you were given.
+
 ### Feedback
 
-While an exercise is in progress its card shows a progressive-overload hint — how this session's target compares to your last performance. Once logged, each set shows a **▲ / = / ▼** glyph for beat / met / missed versus its target.
+While an exercise is in progress its card shows a progressive-overload hint — how this session's target compares to your last performance, including a weight change when the algorithm deloads a set (shown in amber, since easing off isn't progress). Once logged, each set shows a **▲ / = / ▼** glyph for beat / met / missed versus its target.
 
 ### Bodyweight exercises
 
-Bodyweight exercises (pull-ups, dips, etc.) have no weight axis — reps simply climb toward the ceiling. Once every set reaches the ceiling, a set is added (up to six).
+Bodyweight exercises (pull-ups, dips, etc.) have no weight axis — reps simply climb toward the ceiling, and (like the weighted path) a set you fall short on holds at the reps you logged. Once every set reaches the ceiling, a set is added (up to six).
 
 ---
 
