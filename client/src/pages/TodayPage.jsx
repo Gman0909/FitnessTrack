@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
+import { computeProgressionHint } from '../progressionHint.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
 import { weightAdjustedTarget } from '../../../shared/algorithm.js';
 
@@ -680,83 +681,14 @@ function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight,
   // total reps delta — this session's target vs the user's last logged
   // performance of this exercise. Shown only while the card is in progress;
   // it disappears once every set is logged.
-  let volumeHint = null;
-  const matched = exerciseComplete
-    ? []
-    : isBodyweight
-      ? exercise.sets.filter(s => s.prev_reps != null)
-      : exercise.sets.filter(s => s.prev_weight != null && s.prev_reps != null);
-
-  if (matched.length > 0) {
-    if (isBodyweight) {
-      // Reps-only hint — bodyweight fluctuates so volume comparison is misleading.
-      let curReps = 0, prevReps = 0;
-      for (const s of matched) {
-        curReps  += Math.max(exercise.rep_min, Math.min(exercise.rep_max, s.reps));
-        prevReps += s.prev_reps;
-      }
-      const repsDelta = curReps - prevReps;
-      if (repsDelta !== 0) {
-        const fmtR = r => `${r > 0 ? '+' : '−'}${Math.abs(r)} rep${Math.abs(r) !== 1 ? 's' : ''}`;
-        const arrow = repsDelta > 0 ? '▲' : '▼';
-        const color = repsDelta > 0 ? 'var(--success)' : 'var(--danger)';
-        volumeHint = { text: `${arrow} ${fmtR(repsDelta)}`, color };
-      }
-    } else {
-      const toDisp = kg => unit === 'lbs' ? kg * 2.2046 : kg;
-      let curVol = 0, prevVol = 0, curReps = 0, prevReps = 0;
-      let mainSet = matched[0];
-      for (const s of matched) {
-        const tgtReps = Math.max(exercise.rep_min, Math.min(exercise.rep_max, s.reps));
-        curVol   += toDisp(s.weight) * tgtReps;
-        prevVol  += toDisp(s.prev_weight) * s.prev_reps;
-        curReps  += tgtReps;
-        prevReps += s.prev_reps;
-        if (s.prev_weight > mainSet.prev_weight) mainSet = s;
-      }
-      const volDelta  = curVol - prevVol;
-      const pct       = prevVol > 0 ? (volDelta / prevVol) * 100 : 0;
-      const repsDelta = curReps - prevReps;
-      // Heaviest prev set drives the displayed weight delta — that's the set
-      // the algorithm uses as its reference, so it best represents the bump.
-      const wDelta = toDisp(mainSet.weight) - toDisp(mainSet.prev_weight);
-
-      const hasVol  = Math.abs(volDelta) > 0.01;
-      const hasW    = Math.abs(wDelta) >= 0.05;
-      const hasReps = repsDelta !== 0;
-
-      if (hasVol || hasW || hasReps) {
-        const fmtW = w => {
-          const abs = Math.abs(w);
-          const num = abs < 1 ? abs.toFixed(1) : (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1));
-          return `${w > 0 ? '+' : '−'}${num} ${unit}`;
-        };
-        const fmtR = r => `${r > 0 ? '+' : '−'}${Math.abs(r)} rep${Math.abs(r) !== 1 ? 's' : ''}`;
-
-        // Weight direction takes priority over volume direction — a weight
-        // increase always resets reps to repMin, temporarily dropping volume,
-        // but that's progression not regression. Only fall back to volume when
-        // weight is unchanged.
-        const arrow = (hasW && wDelta > 0) ? '▲'
-                    : (hasW && wDelta < 0) ? '▼'
-                    : volDelta > 0.01 ? '▲' : volDelta < -0.01 ? '▼' : '→';
-        const color = (hasW && wDelta > 0) ? 'var(--success)'
-                    : (hasW && wDelta < 0) ? 'var(--danger)'
-                    : volDelta > 0.01 ? 'var(--success)'
-                    : volDelta < -0.01 ? 'var(--danger)'
-                    : 'var(--muted)';
-
-        const parts = [];
-        // Volume % is misleading when weight changed (reps reset makes it look
-        // negative even on a genuine weight progression), so skip it.
-        if (!hasW) parts.push(`(${volDelta > 0 ? '+' : volDelta < 0 ? '−' : ''}${Math.abs(Math.round(pct))}%)`);
-        if (hasW)    parts.push(fmtW(wDelta));
-        if (hasReps) parts.push(fmtR(repsDelta));
-
-        volumeHint = { text: `${arrow} ${parts.join(' ')}`, color };
-      }
-    }
-  }
+  const volumeHint = computeProgressionHint({
+    sets: exercise.sets,
+    repMin: exercise.rep_min,
+    repMax: exercise.rep_max,
+    exerciseComplete,
+    isBodyweight,
+    unit,
+  });
 
   return (
     <div
