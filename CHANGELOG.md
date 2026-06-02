@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.5.0] - 2026-06-02
+
+Progression-algorithm overhaul — safer, self-regulating, and more honest about what it's doing.
+
+### Added
+- **Adaptive progression tempo** — progression speed self-tunes from recent performance, with no subjective input. Beating an exercise's targets two sessions running shifts it **faster** (reps climb +2, weight bumps take a larger step); falling short two sessions running shifts it **slower** (weight changes shrink to the smallest step). Derived purely from logged volume (weight × reps) versus target.
+- **Typo guard** — logging a weight far off the target (>25%) or an implausibly high rep count now prompts a confirmation, so a mis-tap can't silently derail the next session's targets.
+
+### Changed
+- **Underperformed sets hold at the reps you logged**, not the target you missed. Previously a set short of target was re-issued the original target, so a large miss produced an *upward* jump (e.g. logging 10 against a target of 15 → next target 15). Now the set holds at what you actually logged and must be beaten before the target advances — for both weighted and bodyweight exercises.
+- **Descending-weight clamp** — per-set progression can no longer prescribe a later set heavier than an earlier one. A set that earns a weight bump an earlier (lighter) set hasn't yet parks at the top of its range and waits; the sets then advance together. Keeps the per-set weights a coherent, non-increasing profile.
+- **Deload now requires two strikes** — dropping below the bottom of the rep range no longer eases the weight off after a single session. One bad day holds the weight and re-attempts; the weight only drops after a second consecutive sub-floor session.
+
+### Fixed
+- **Progression hint hid per-set deloads.** The weight-change figure only inspected the heaviest previous set, so a deload on a lighter set was invisible and its extra rep showed as clean green "+1 rep" progress. The hint now surfaces the largest per-set weight change and renders a deload in amber (caution), not green.
+
+### Internal
+- `recomputeExercise` is exported and computes the history-derived signals (adaptive tempo, prior-floor-miss) server-side, passing them into the now-pure `nextExerciseTargets`. Stored forward targets are regenerated through this same path — no duplicated logic. Progression-hint logic extracted to a unit-tested `computeProgressionHint`; algorithm suite expanded to 46 cases.
+
+---
+
 ## [1.3.0] - 2026-05-16
 
 ### Changed
