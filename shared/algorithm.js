@@ -7,7 +7,7 @@
 //
 //   actual_reps >= repMax              → weight bump: weight + increment, reps → repMin
 //   target_reps <= actual_reps < repMax → rep progress: reps → min(repMax, actual + 1)
-//   repMin <= actual_reps < target_reps → hold: same weight & target reps
+//   repMin <= actual_reps < target_reps → hold: same weight, reps → logged reps (beat it to advance)
 //   actual_reps < repMin                → ease off: weight − increment, reps → repMin
 //   skipped / not logged                → unchanged
 //
@@ -20,8 +20,9 @@
 // training: the freshest set climbs fastest and bumps weight first, while later
 // sets settle at their own weight/rep levels.
 //
-// Bodyweight exercises have no weight axis — reps simply climb toward repMax and
-// hold there; the caller adds a set when every set has reached the ceiling.
+// Bodyweight exercises have no weight axis — reps climb toward repMax and hold
+// there; a set short of its target holds at the logged reps (beat it to advance),
+// mirroring the weighted path. The caller adds a set when every set hits ceiling.
 
 // Cap the increment at 10% of the working weight; floor at 1.25 kg (smallest
 // real plate) so light isolation lifts still progress.
@@ -98,7 +99,7 @@ export function nextExerciseTargets(setData, opts = {}) {
       let reps;
       if (effActual >= repMax)           reps = repMax;                       // ceiling — caller may add a set
       else if (effActual >= t.reps)      reps = Math.min(repMax, effActual + 1);
-      else                               reps = t.reps;                       // hold
+      else                               reps = Math.max(repMin, effActual);  // short → hold at logged reps (beat it to advance)
       return { set_num: s.set_num, weight, reps };
     }
 
@@ -129,10 +130,11 @@ export function nextExerciseTargets(setData, opts = {}) {
       if (actualVol >= targetVol - 0.01) {
         return { set_num: s.set_num, weight: baseW, reps: Math.min(repMax, actualReps + 1) };
       }
-      // Short on volume → hold. Target the reps needed at the actual weight to
-      // hit the original volume next session, giving a clear progression path.
-      const repsNeeded = Math.ceil(targetVol / baseW);
-      return { set_num: s.set_num, weight: baseW, reps: Math.max(repMin, Math.min(repMax, repsNeeded)) };
+      // Short of the volume goal → hold exactly what was logged: same weight
+      // (already baseW = what was used), reps → logged reps. The set must be
+      // beaten before its target moves, so a missed target is never re-issued
+      // as the next ask (which would prescribe a jump up from a worse result).
+      return { set_num: s.set_num, weight: baseW, reps: Math.max(repMin, Math.min(repMax, actualReps)) };
     }
     // No target weight (bootstrap) → fall back to rep comparison.
     if (actualReps >= cmp.reps) {

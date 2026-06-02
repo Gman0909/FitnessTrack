@@ -102,11 +102,22 @@ test('logged < repMin → weight drop, reps reset to repMin', () => {
   assertEq(t.reps, 8);
 });
 
-test('logged between repMin and target → hold', () => {
+test('logged below target (in range) → hold at logged reps', () => {
+  // Short of the volume goal: weight held, next target = what was logged.
+  // The set must be beaten before it moves — the missed target is not re-issued.
   const sets = [makeSet(1, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 9 })];
   const [t] = nextExerciseTargets(sets, WEIGHTED);
   assertEq(t.weight, 60);
-  assertEq(t.reps, 10);
+  assertEq(t.reps, 9);
+});
+
+test('big miss in range → hold at logged reps, no jump back to target', () => {
+  // Regression guard: target at the rep ceiling, logged well short. Must not
+  // re-prescribe the ceiling (the old behavior gave a +4 rep jump from a miss).
+  const sets = [makeSet(1, { targetW: 60, targetR: 12, loggedW: 60, loggedR: 8 })];
+  const [t] = nextExerciseTargets(sets, WEIGHTED);
+  assertEq(t.weight, 60);
+  assertEq(t.reps, 8);
 });
 
 test('logged >= target but < repMax → add a rep', () => {
@@ -151,7 +162,7 @@ test('multi-set independence: each set is its own progression track', () => {
   const sets = [
     makeSet(1, { targetW: 60, targetR: 12, loggedW: 60, loggedR: 12 }), // at ceiling → weight bump
     makeSet(2, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 10 }), // at target → add rep
-    makeSet(3, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 9  }), // below target → hold
+    makeSet(3, { targetW: 60, targetR: 10, loggedW: 60, loggedR: 9  }), // below target → hold at logged
   ];
   const targets = nextExerciseTargets(sets, WEIGHTED);
   assert(targets[0].weight > 60, 'set 1 should bump weight');
@@ -159,7 +170,7 @@ test('multi-set independence: each set is its own progression track', () => {
   assertEq(targets[1].weight, 60);
   assertEq(targets[1].reps, 11);
   assertEq(targets[2].weight, 60);
-  assertEq(targets[2].reps, 10);
+  assertEq(targets[2].reps, 9);
 });
 
 // ── nextExerciseTargets — bodyweight (repsOnly) ───────────────────────────────
@@ -185,10 +196,12 @@ test('skipped bodyweight set → carry forward unchanged', () => {
   assertEq(t.reps, 10);
 });
 
-test('below target → hold (not at rep max)', () => {
+test('below target → hold at logged reps (not target, not rep max)', () => {
+  // Underperformance is treated the same as the weighted path: hold what was
+  // logged so the set must be beaten before its target moves.
   const sets = [makeSet(1, { targetW: 0, targetR: 11, loggedW: 0, loggedR: 9 })];
   const [t] = nextExerciseTargets(sets, BODYWEIGHT);
-  assertEq(t.reps, 11); // hold
+  assertEq(t.reps, 9);
 });
 
 // ── nextExerciseTargets — pause_weight ───────────────────────────────────────
