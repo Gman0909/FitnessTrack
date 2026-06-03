@@ -584,8 +584,22 @@ function HistoryChart({ data, metric }) {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const shortDate = s => { const [,m,d] = s.split('-').map(Number); return `${MONTHS[m-1]} ${d}`; };
 
+  // Hover / tap to inspect a point — map the pointer to the nearest data index.
+  const svgRef = useRef(null);
+  const [active, setActive] = useState(null);
+  const locate = e => {
+    const svg = svgRef.current; if (!svg) return;
+    const cx = e.clientX ?? e.touches?.[0]?.clientX ?? e.changedTouches?.[0]?.clientX;
+    if (cx == null) return;
+    const rect = svg.getBoundingClientRect();
+    const vbX = (cx - rect.left) / rect.width * W;
+    const i = data.length > 1 ? Math.round((vbX - pad.left) / cW * (data.length - 1)) : 0;
+    setActive(Math.max(0, Math.min(data.length - 1, i)));
+  };
+
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display:'block' }}>
+    <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display:'block', touchAction:'pan-y', cursor:'crosshair' }}
+      onMouseMove={locate} onMouseLeave={() => setActive(null)} onTouchStart={locate} onTouchMove={locate}>
       {yTicks.map((v, i) => (
         <line key={i} x1={pad.left} y1={yOf(v)} x2={W - pad.right} y2={yOf(v)}
           stroke="var(--border)" strokeWidth="1" />
@@ -606,6 +620,30 @@ function HistoryChart({ data, metric }) {
           {shortDate(data[idx].date)}
         </text>
       ))}
+
+      {active != null && (() => {
+        const d = data[active];
+        const ax = xOf(active), ay = yOf(toDisp(valueOf(d)));
+        const valStr = metric === 'volume'
+          ? `${Math.round(toDisp(d.volume)).toLocaleString()} ${unit}·reps`
+          : `${toDisp(d.max_weight)} ${unit}`;
+        const setsStr = `${d.sets_logged} set${d.sets_logged !== 1 ? 's' : ''}`;
+        const lineH = 15, boxW = 128, boxH = 10 + 3 * lineH;
+        const bx = Math.max(2, Math.min(W - boxW - 2, ax - boxW / 2));
+        let by = ay - boxH - 12;
+        if (by < pad.top) by = ay + 14;
+        by = Math.max(2, Math.min(H - boxH - 2, by));
+        return (
+          <g style={{ pointerEvents: 'none' }}>
+            <line x1={ax} y1={pad.top} x2={ax} y2={pad.top + cH} stroke="var(--dim)" strokeWidth="1" strokeDasharray="3 3" />
+            <circle cx={ax} cy={ay} r="4.5" fill="var(--success)" stroke="var(--surface2)" strokeWidth="1.5" />
+            <rect x={bx} y={by} width={boxW} height={boxH} rx="6" fill="#1c1c1c" stroke="#333" />
+            <text x={bx + 9} y={by + 16}            fontSize="11" fontWeight="700" fill="#e8e8e8">{shortDate(d.date)}</text>
+            <text x={bx + 9} y={by + 16 + lineH}     fontSize="11" fill="var(--success)">{valStr}</text>
+            <text x={bx + 9} y={by + 16 + 2 * lineH} fontSize="11" fill="#9a9a9a">{setsStr}</text>
+          </g>
+        );
+      })()}
     </svg>
   );
 }
