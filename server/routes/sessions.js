@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { nextExerciseTargets } from '../../shared/algorithm.js';
+import { liftVerdict, summarizeVerdicts } from '../../shared/recap.js';
 import { slotDone } from '../../shared/slotDone.js';
 import { effectiveSetCount, recordSetCount, clearSetCountAt } from '../setCounts.js';
 
@@ -431,6 +432,107 @@ router.get('/history', (req, res) => {
     ORDER BY e.muscle_group, e.name
   `).all(req.user.id);
   res.json(rows);
+});
+
+// ── Post-workout recap — week-on-week comparison ──────────────────────────────
+router.get('/:id/recap', (req, res) => {
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+  const planId = session.plan_id ?? null;
+  const dow    = session.session_dow;
+  const userId = req.user.id;
+
+  const sched = db.prepare(`
+    SELECT s.exercise_id, s.position, e.name, e.muscle_group, e.equipment,
+           COALESCE(ues.pause_weight, 0) AS pause_weight
+    FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
+    WHERE s.plan_id IS ? AND s.day_of_week = ?
+    ORDER BY s.position
+  `).all(userId, planId, dow);
+
+  // Comparable prior session: same slot last week, else most recent earlier
+  // completed instance of this day, else nothing (baseline).
+  let prev = db.prepare(
+    'SELECT * FROM sessions WHERE plan_id IS ? AND session_dow = ? AND week_num = ? AND user_id = ? AND checked_in = 1'
+  ).get(planId, dow, session.week_num - 1, userId);
+  let comparison = 'last_week';
+  if (!prev) {
+    prev = db.prepare(
+      'SELECT * FROM sessions WHERE plan_id IS ? AND session_dow = ? AND week_num < ? AND user_id = ? AND checked_in = 1 AND date IS NOT NULL ORDER BY week_num DESC, id DESC LIMIT 1'
+    ).get(planId, dow, session.week_num, userId);
+    comparison = prev ? 'earlier' : 'baseline';
+  }
+
+  const setsFor = db.prepare(
+    'SELECT weight_used AS w, reps_done AS r FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND skipped = 0 AND reps_done IS NOT NULL'
+  );
+  const agg = (sessId, exId) => {
+    const rows = setsFor.all(sessId, exId);
+    if (!rows.length) return null;
+    let vol = 0, reps = 0, topW = 0, topReps = 0;
+    for (const s of rows) {
+      const w = s.w ?? 0;
+      vol += w * s.r; reps += s.r;
+      if (w > topW)   topW = w;
+      if (s.r > topReps) topReps = s.r;
+    }
+    return { topW, topReps, vol, reps, sets: rows.map(s => ({ weight: s.w, reps: s.r })) };
+  };
+  const bestBefore = (col, exId) => db.prepare(
+    `SELECT MAX(ls.${col}) AS m FROM logged_sets ls JOIN sessions s ON s.id = ls.session_id
+     WHERE ls.exercise_id = ? AND s.user_id = ? AND ls.skipped = 0 AND s.id <> ?`
+  ).get(exId, userId, session.id).m;
+
+  const exercises = [];
+  let thisVol = 0, prevVol = 0, repsAdded = 0;
+  for (const sc of sched) {
+    const t = agg(session.id, sc.exercise_id);
+    if (!t) continue; // not trained this session
+    const repsOnly = sc.equipment === 'bodyweight' || sc.pause_weight === 1;
+    const p = prev ? agg(prev.id, sc.exercise_id) : null;
+    const verdict = liftVerdict(t, p, { isBodyweight: repsOnly });
+    const tempo = exerciseTempo(planId, sc.exercise_id, userId, session.id, session.date ?? todayStr(), repsOnly);
+
+    let pr = null;
+    if (repsOnly) {
+      const m = bestBefore('reps_done', sc.exercise_id);
+      if (m != null && t.topReps > m) pr = 'reps';
+    } else {
+      const m = bestBefore('weight_used', sc.exercise_id);
+      if (m != null && t.topW > m) pr = 'weight';
+    }
+
+    thisVol += t.vol;
+    if (p) { prevVol += p.vol; repsAdded += (t.reps - p.reps); }
+
+    exercises.push({
+      exercise_id: sc.exercise_id, name: sc.name, muscle_group: sc.muscle_group,
+      is_bodyweight: repsOnly, verdict, tempo, pr,
+      this: { top_weight: t.topW, top_reps: t.topReps, volume: Math.round(t.vol), sets: t.sets },
+      prev: p ? { top_weight: p.topW, top_reps: p.topReps, volume: Math.round(p.vol) } : null,
+    });
+  }
+
+  const counts = summarizeVerdicts(exercises.map(e => e.verdict));
+  const volDeltaPct = (comparison !== 'baseline' && prevVol > 0)
+    ? Math.round((thisVol - prevVol) / prevVol * 100) : null;
+
+  let biggest = null;
+  for (const e of exercises) {
+    if (!e.prev) continue;
+    const gain = e.this.volume - e.prev.volume;
+    if (gain > 0 && (!biggest || gain > biggest.gain)) biggest = { name: e.name, gain };
+  }
+
+  res.json({
+    week_num: session.week_num, session_dow: dow,
+    comparison, compared_week: prev ? prev.week_num : null,
+    lifts_up: counts.up, lifts_comparable: counts.comparable, counts,
+    volume: { this: Math.round(thisVol), prev: Math.round(prevVol), delta_pct: volDeltaPct },
+    reps_added: repsAdded, biggest_jump: biggest,
+    exercises,
+  });
 });
 
 export default router;

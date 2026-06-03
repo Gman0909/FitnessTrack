@@ -23,6 +23,7 @@ export const api = {
   getSessionSets:    (id)       => req('GET',    `/sessions/${id}/sets`),
   logSet:            (id, body) => req('POST',   `/sessions/${id}/sets`, body),
   unlogSet:          (id, exerciseId, setNum) => req('DELETE', `/sessions/${id}/sets/${exerciseId}/${setNum}`),
+  getRecap:          (id)       => req('GET',    `/sessions/${id}/recap`),
 
   // Schedule
   getScheduleToday:   ()              => req('GET', '/schedule/today'),

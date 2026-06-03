@@ -4,6 +4,7 @@ import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
 import { computeProgressionHint } from '../progressionHint.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
+import { WorkoutRecap } from '../components/WorkoutRecap.jsx';
 import { weightAdjustedTarget } from '../../../shared/algorithm.js';
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -869,6 +870,8 @@ export default function TodayPage() {
   const [weekCount, setWeekCount]           = useState(null);
   const [weekShrinkWarning, setWeekShrinkWarning] = useState(null);
   const [endOfPlanModal, setEndOfPlanModal] = useState(false);
+  const [recap, setRecap]                   = useState(null);
+  const [pendingEndOfPlan, setPendingEndOfPlan] = useState(false);
 
   // Session & exercises
   const [session, setSession]       = useState(null);
@@ -1105,10 +1108,13 @@ export default function TodayPage() {
     if (sessLoading || isReadOnly || !allDone || completionHandledRef.current) return;
     completionHandledRef.current = true;
     if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData).catch(() => {});
+    // Show the week-on-week recap; if this was the plan's last session, queue the
+    // end-of-plan prompt to follow once the recap is dismissed.
+    if (session?.id) api.getRecap(session.id).then(setRecap).catch(() => {});
     const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
     const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
     if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow)
-      setEndOfPlanModal(true);
+      setPendingEndOfPlan(true);
   }, [allDone, sessLoading, isReadOnly]); // eslint-disable-line
 
   // Persist unsaved weight/reps so they survive a reload or slot switch.
@@ -1543,6 +1549,16 @@ export default function TodayPage() {
           weekNum={weekShrinkWarning.weekNum}
           onConfirm={() => { applyWeekCountChange(weekShrinkWarning.newCount); setWeekShrinkWarning(null); }}
           onCancel={() => setWeekShrinkWarning(null)}
+        />
+      )}
+
+      {recap && (
+        <WorkoutRecap
+          data={recap}
+          onClose={() => {
+            setRecap(null);
+            if (pendingEndOfPlan) { setPendingEndOfPlan(false); setEndOfPlanModal(true); }
+          }}
         />
       )}
 
