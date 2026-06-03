@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1] - 2026-06-03
+
+### Added
+- **Hover/tap detail on the exercise-card history chart** — the per-exercise history graph now draws a guide line, a highlighted point, and a detail box (date · volume or top weight · set count) on hover or tap, matching the interaction already on the Stats page charts.
+
+---
+
 ## [1.6.0] - 2026-06-03
 
 ### Added
