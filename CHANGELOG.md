@@ -3,7 +3,7 @@
 ## [1.6.0] - 2026-06-03
 
 ### Added
-- **Post-workout recap** — finishing a session surfaces a week-on-week summary sheet comparing it to the same slot last week: a "lifts up" ring, a per-lift verdict bar (up / held / down / eased off), the session's volume delta, new-best and biggest-jump highlights, adaptive-tempo call-outs, and a lift-by-lift `last → this` breakdown. Falls back to an earlier completed week, or a baseline message the first time through. Backed by a new `GET /api/sessions/:id/recap` endpoint and a pure, unit-tested verdict module (`shared/recap.js`).
+- **Post-workout recap** — finishing a session surfaces a week-on-week summary sheet comparing it to the same slot last week: an adaptive verdict-driven headline (encouraging even on a rough week), a "lifts up" ring, a per-lift verdict bar (up / held / down / eased off), the session's volume delta with a multi-week sparkline, muscle-group accents, new-best and biggest-jump highlights, adaptive-tempo call-outs, and a lift-by-lift `last → this` breakdown. Numbers count up on open; the sheet slides in and honours `prefers-reduced-motion`. Falls back to an earlier completed week, or a baseline message the first time through. Backed by a new `GET /api/sessions/:id/recap` endpoint and a pure, unit-tested verdict module (`shared/recap.js`).
 
 ---
 

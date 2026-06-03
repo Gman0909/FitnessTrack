@@ -525,12 +525,22 @@ router.get('/:id/recap', (req, res) => {
     if (gain > 0 && (!biggest || gain > biggest.gain)) biggest = { name: e.name, gain };
   }
 
+  // Volume trend across the last few completed instances of this slot (oldest→newest).
+  const trend = db.prepare(`
+    SELECT s.week_num AS week, SUM(ls.weight_used * ls.reps_done) AS vol
+    FROM sessions s JOIN logged_sets ls ON ls.session_id = s.id
+    WHERE s.plan_id IS ? AND s.session_dow = ? AND s.user_id = ? AND s.checked_in = 1
+      AND ls.skipped = 0 AND ls.weight_used IS NOT NULL AND ls.reps_done IS NOT NULL
+      AND s.week_num <= ?
+    GROUP BY s.id ORDER BY s.week_num DESC LIMIT 6
+  `).all(planId, dow, userId, session.week_num).reverse().map(r => ({ week: r.week, vol: Math.round(r.vol) }));
+
   res.json({
     week_num: session.week_num, session_dow: dow,
     comparison, compared_week: prev ? prev.week_num : null,
     lifts_up: counts.up, lifts_comparable: counts.comparable, counts,
     volume: { this: Math.round(thisVol), prev: Math.round(prevVol), delta_pct: volDeltaPct },
-    reps_added: repsAdded, biggest_jump: biggest,
+    reps_added: repsAdded, biggest_jump: biggest, trend,
     exercises,
   });
 });
