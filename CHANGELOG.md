@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2] - 2026-06-04
+
+### Added
+- **Recap link on the all-done banner** — completed workouts now show a small "Recap" link to the right of the "All done" banner that re-opens the week-on-week recap sheet for that session, including past/read-only sessions where the recap didn't auto-show.
+
+---
+
 ## [1.6.1] - 2026-06-03
 
 ### Added
