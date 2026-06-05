@@ -4,10 +4,11 @@ A free, open-source, self-hosted progressive overload tracker for strength train
 
 Runs on a Raspberry Pi, a home server, or any machine with Node.js. Your data stays on your hardware.
 
----
 
-| <img height="768" alt="Screenshot 2026-05-18 084721" src="https://github.com/user-attachments/assets/7194704d-c4c8-4ec2-8428-39598b8e9347" /> | <img width="394" height="768" alt="FitnessTrack progression feedback — per-set targets advance automatically via double progression" src="https://github.com/user-attachments/assets/a42cf1b7-8edc-44d0-b97c-a6ba0022d9bd" /> | <img width="396" height="768" alt="FitnessTrack workout plan calendar — week-by-week session grid with completion status" src="https://github.com/user-attachments/assets/ef5f2243-1bf8-4a10-a4f2-425cf770bb6d" /><br> |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <img height="768" alt="Screenshot 2026-05-18 084721" src="https://github.com/user-attachments/assets/7194704d-c4c8-4ec2-8428-39598b8e9347" /> | <img width="394" height="768" alt="FitnessTrack progression feedback — per-set targets advance automatically via double progression" src="https://github.com/user-attachments/assets/a42cf1b7-8edc-44d0-b97c-a6ba0022d9bd" /> | <img width="396" height="768" alt="FitnessTrack workout plan calendar — week-by-week session grid with completion status" src="https://github.com/user-attachments/assets/ef5f2243-1bf8-4a10-a4f2-425cf770bb6d" /><br> | <img height="768" alt="image" src="https://github.com/user-attachments/assets/cd8240bb-644f-43d2-bfae-c8188cf9e09a" /> |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+
+
 
 
 
