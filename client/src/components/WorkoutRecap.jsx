@@ -112,8 +112,8 @@ export function WorkoutRecap({ data, onClose }) {
     const comp = data.lifts_comparable, ratio = comp > 0 ? data.lifts_up / comp : 0;
     const rough = (counts.down + counts.eased) > data.lifts_up;
     if (comp === 0)                 hero = { head: 'Session logged', sub: `vs ${vsLabel}`, color: 'var(--text)' };
-    else if (ratio >= 0.6)          hero = { head: 'Strong week',    sub: `lifts up on ${vsLabel}`, color: 'var(--success)' };
-    else if (rough || ratio < 0.34) hero = { head: 'Tough one',      sub: `held the line — the targets ease off, so ${vsLabel === 'last week' ? 'next week' : 'next time'}’s a fresh shot`, color: '#f0a030' };
+    else if (ratio >= 0.6)          hero = { head: 'Strong session', sub: `lifts up on ${vsLabel}`, color: 'var(--success)' };
+    else if (rough || ratio < 0.34) hero = { head: 'Tough session',  sub: `held the line — the targets ease off, so ${vsLabel === 'last week' ? 'next week' : 'next time'}’s a fresh shot`, color: '#f0a030' };
     else                            hero = { head: 'Solid session',  sub: `lifts up on ${vsLabel}`, color: 'var(--text)' };
   }
 
