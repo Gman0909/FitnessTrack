@@ -1510,7 +1510,7 @@ export default function TodayPage() {
           {allDone ? (
             <div style={{ marginTop:'1rem' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem', padding:'0.85rem 1rem', background:'#152015', border:'1px solid #2d4a2d', borderRadius:'10px', color:'var(--success)', fontWeight:'600' }}>
-                <span>✓ All done — next session targets updated.</span>
+                <span>✓ All done<span className="ft-banner-short">.</span><span className="ft-banner-full"> — next session targets updated.</span></span>
                 {session?.id && (
                   <button type="button" onClick={() => api.getRecap(session.id).then(setRecap).catch(() => {})}
                     style={{ background:'none', border:'none', color:'var(--success)', fontSize:'0.85rem', fontWeight:'600', cursor:'pointer', textDecoration:'underline', padding:0, whiteSpace:'nowrap' }}>
