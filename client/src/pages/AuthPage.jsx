@@ -2,25 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useAuth } from '../auth.jsx';
-import { BarbellLogo } from '../App.jsx';
-
-const GLYPHS = [
-  '🏋️','🤸','🧘','🚴','🏃','💪','🥊','🏊',
-  '🧗','🎯','🏆','🌟','🔥','⚡','💎','🦁',
-  '🐯','🦊','🦅','🐺','🌙','☀️','🌊','🌿',
-];
-
-const field = {
-  padding: '0.75rem 0.85rem',
-  minHeight: '46px',
-  border: '1px solid var(--border)',
-  borderRadius: '8px',
-  background: 'var(--input-bg)',
-  color: 'var(--text)',
-  fontSize: '16px',
-  width: '100%',
-  boxSizing: 'border-box',
-};
+import { BarbellLogo, GlyphPicker, field } from '../ui.jsx';
 
 export default function AuthPage() {
   const { setUser } = useAuth();
@@ -100,20 +82,7 @@ export default function AuthPage() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Choose a glyph</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
-                    {GLYPHS.map(g => (
-                      <button key={g} type="button" onClick={() => setGlyph(g)} style={{
-                        aspectRatio: '1 / 1',
-                        minHeight: '44px',
-                        border: `2px solid ${glyph === g ? 'var(--text)' : 'var(--border)'}`,
-                        borderRadius: '8px',
-                        background: glyph === g ? 'var(--surface3)' : 'var(--surface2)',
-                        fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'border-color 0.1s, background 0.1s',
-                      }}>{g}</button>
-                    ))}
-                  </div>
+                  <GlyphPicker value={glyph} onChange={setGlyph} />
                 </div>
               </>
             )}

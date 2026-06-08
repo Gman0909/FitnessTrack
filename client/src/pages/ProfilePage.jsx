@@ -1,19 +1,8 @@
 import { useState } from 'react';
 import { api } from '../api/index.js';
 import { useAuth } from '../auth.jsx';
+import { GlyphPicker, field } from '../ui.jsx';
 
-const GLYPHS = [
-  '🏋️','🤸','🧘','🚴','🏃','💪','🥊','🏊',
-  '🧗','🎯','🏆','🌟','🔥','⚡','💎','🦁',
-  '🐯','🦊','🦅','🐺','🌙','☀️','🌊','🌿',
-];
-
-const field = {
-  padding: '0.75rem 0.85rem', minHeight: '46px',
-  border: '1px solid var(--border)', borderRadius: '8px',
-  background: 'var(--input-bg)', color: 'var(--text)', fontSize: '16px',
-  width: '100%', boxSizing: 'border-box',
-};
 const label = {
   display: 'block', fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.4rem',
   fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -71,19 +60,7 @@ export default function ProfilePage() {
         {/* Avatar */}
         <div>
           <span style={label}>Avatar</span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
-            {GLYPHS.map(g => (
-              <button key={g} type="button" onClick={() => setGlyph(g)} style={{
-                aspectRatio: '1 / 1',
-                minHeight: '44px',
-                border: `2px solid ${glyph === g ? 'var(--text)' : 'var(--border)'}`,
-                borderRadius: '8px', background: glyph === g ? 'var(--surface3)' : 'var(--surface2)',
-                fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'border-color 0.1s, background 0.1s',
-              }}>{g}</button>
-            ))}
-          </div>
+          <GlyphPicker value={glyph} onChange={setGlyph} />
         </div>
 
         {/* Display name */}
