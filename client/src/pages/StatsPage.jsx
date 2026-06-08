@@ -168,7 +168,7 @@ export function StatsPage() {
     api.getExerciseHistory(selEx.exercise_id).then(setExHistory);
   }, [selEx]);
 
-  const { overview, weekly_volume = [], session_volume = [], muscle_volume = [], personal_bests = [], bodyweight_bests = [], top_exercises = [] } = stats ?? {};
+  const { overview, weekly_volume = [], session_volume = [], muscle_volume = [], muscle_progress = [], personal_bests = [], bodyweight_bests = [], top_exercises = [] } = stats ?? {};
 
   const volScale = unit === 'lbs' ? 2.2046 : 1;
   const volUnit  = unit === 'lbs' ? 'lbs' : 'kg';
@@ -287,6 +287,39 @@ export function StatsPage() {
               </div>
             ))}
           </div>
+        </div>
+      </>}
+
+      {/* Progress by muscle group — first recorded week vs latest completed week */}
+      {muscle_progress.length > 0 && <>
+        <Section title="Progress by Muscle Group" />
+        <p style={{ margin: '0 0 0.6rem', fontSize: '0.72rem', color: 'var(--muted)' }}>
+          Volume change from {fmtWeekRange(muscle_progress[0].first_week)} to {fmtWeekRange(muscle_progress[0].last_week)} (latest completed week).
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+          {muscle_progress.map(r => {
+            const flat = r.trend === null || r.trend === 0;
+            const up   = r.trend > 0;
+            const color = flat ? 'var(--dim)' : up ? '#3cc9b0' : '#e05c8a';
+            const last  = r.last_vol  != null ? Math.round(r.last_vol  * volScale).toLocaleString() : null;
+            const first = r.first_vol != null ? Math.round(r.first_vol * volScale).toLocaleString() : null;
+            return (
+              <div key={r.muscle_group} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                <div style={{ width: 9, height: 9, borderRadius: '50%', background: MG_COLOR[r.muscle_group] ?? '#888', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.86rem', color: 'var(--text)', textTransform: 'capitalize' }}>{r.muscle_group}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--dim)' }}>
+                    {r.trend === null
+                      ? 'no comparable data in both weeks'
+                      : `${first} → ${last} ${volUnit}·reps`}
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.82rem', fontWeight: '600', color, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                  {r.trend === null ? '—' : up ? `▲ +${r.trend}%` : flat ? '0%' : `▼ ${r.trend}%`}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </>}
 

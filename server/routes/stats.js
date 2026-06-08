@@ -68,6 +68,43 @@ router.get('/', (req, res) => {
     GROUP BY e.muscle_group ORDER BY volume DESC
   `).all(...P);
 
+  // Per-muscle-group volume progression: compare each group's total volume in
+  // the FIRST recorded week against the most recent COMPLETED week within the
+  // scoped period. Weeks are Monday-anchored (same ${WEEK_OF} as the weekly
+  // chart) so a structured plan that repeats the same exercises each week gives
+  // a clean like-for-like comparison. The current, still-in-progress calendar
+  // week is excluded — only fully-elapsed weeks count as "completed to date".
+  const weekRows = db.prepare(`
+    SELECT e.muscle_group, ${WEEK_OF} AS week_start, SUM(ls.weight_used * ls.reps_done) AS volume
+    FROM logged_sets ls
+    JOIN sessions s  ON s.id  = ls.session_id
+    JOIN exercises e ON e.id  = ls.exercise_id
+    WHERE ${SCOPE} AND ls.skipped = 0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
+    GROUP BY e.muscle_group, week_start
+  `).all(...P);
+
+  const { cur } = db.prepare(
+    `SELECT date('now', '-' || ((cast(strftime('%w','now') as integer) + 6) % 7) || ' days') AS cur`
+  ).get();
+
+  const weeks     = [...new Set(weekRows.map(r => r.week_start))].sort();   // ascending
+  const completed = weeks.filter(w => w < cur);
+  const firstWeek = completed[0] ?? null;
+  const lastWeek  = completed.length > 1 ? completed[completed.length - 1] : null;
+
+  let muscle_progress = [];
+  if (firstWeek && lastWeek) {
+    const at  = (mg, wk) => weekRows.find(r => r.muscle_group === mg && r.week_start === wk)?.volume ?? null;
+    const mgs = [...new Set(weekRows.map(r => r.muscle_group))];
+    muscle_progress = mgs.map(muscle_group => {
+      const first_vol = at(muscle_group, firstWeek);
+      const last_vol  = at(muscle_group, lastWeek);
+      const trend = first_vol && last_vol && first_vol > 0
+        ? Math.round((last_vol - first_vol) / first_vol * 100) : null;
+      return { muscle_group, first_week: firstWeek, last_week: lastWeek, first_vol, last_vol, trend };
+    }).sort((a, b) => (b.last_vol ?? 0) - (a.last_vol ?? 0));
+  }
+
   // Weighted exercises — best is the heaviest weight ever logged. Bodyweight
   // exercises are excluded here: their logged "weight" is just the user's
   // bodyweight, which would always rank them at the top. They get a separate
@@ -122,7 +159,7 @@ router.get('/', (req, res) => {
     LIMIT 10
   `).all(...P);
 
-  res.json({ overview: { ...ov, avg_per_week }, weekly_volume, session_volume, muscle_volume, personal_bests, bodyweight_bests, top_exercises });
+  res.json({ overview: { ...ov, avg_per_week }, weekly_volume, session_volume, muscle_volume, muscle_progress, personal_bests, bodyweight_bests, top_exercises });
 });
 
 router.get('/export', (req, res) => {

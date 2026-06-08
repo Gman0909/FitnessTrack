@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.4] - 2026-06-08
+
+### Added
+- **"Progress by Muscle Group" panel on the Stats page** — below "Volume by Muscle Group", each muscle group shows its volume change from the first recorded week to the most recent *completed* week (the current, in-progress week is excluded), following the All time / This plan scope. Weeks are Monday-anchored, so for a plan that repeats the same exercises each week it's a clean like-for-like comparison. The panel hides when the period has fewer than two completed weeks.
+
+---
+
 ## [1.6.3] - 2026-06-08
 
 ### Changed
