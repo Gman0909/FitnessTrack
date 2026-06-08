@@ -85,13 +85,18 @@ export function recomputeExercise(session, exerciseId) {
            COALESCE(ues.rep_min, e.rep_min) AS rep_min,
            COALESCE(ues.rep_max, e.rep_max) AS rep_max,
            COALESCE(ues.pause_weight, 0)    AS pause_weight,
+           ues.pause_cap_kg                 AS pause_cap_kg,
            COALESCE(ues.optimal_sets, 6)    AS optimal_sets
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.plan_id IS ? AND s.day_of_week = ? AND s.exercise_id = ?
   `).get(session.user_id, planId, session.session_dow, exerciseId);
   if (!sched) return;
-  const repsOnly = sched.equipment === 'bodyweight' || sched.pause_weight === 1;
+  // A paused exercise with a stored cap progresses weight up to the cap (not
+  // reps-only). Bodyweight, and legacy paused rows without a cap, stay reps-only.
+  const capped   = sched.pause_weight === 1 && sched.pause_cap_kg != null;
+  const repsOnly = sched.equipment === 'bodyweight' || (sched.pause_weight === 1 && sched.pause_cap_kg == null);
+  const weightCap = capped ? sched.pause_cap_kg : null;
 
   const sessionDateStr = session.date ?? todayStr();
   const nextDayStr = addDay(sessionDateStr);
@@ -147,7 +152,7 @@ export function recomputeExercise(session, exerciseId) {
   const nextTargets = nextExerciseTargets(setData, {
     repMin: sched.rep_min, repMax: sched.rep_max,
     increment: sched.default_increment ?? 2.5, equipment: sched.equipment,
-    pauseWeight: repsOnly, tempo,
+    pauseWeight: repsOnly, weightCapKg: weightCap, tempo,
   });
 
   const writeTarget = db.prepare(
@@ -156,15 +161,19 @@ export function recomputeExercise(session, exerciseId) {
   for (const t of nextTargets)
     writeTarget.run(exerciseId, t.set_num, t.weight ?? null, t.reps, nextDayStr, planId);
 
-  // Reps-only double progression: when every non-skipped set reached the rep
-  // ceiling, add a set (cap 6). Skipped sets are treated as neutral — they
-  // neither earn nor block the progression set.
-  if (repsOnly && setCount < sched.optimal_sets) {
-    const allAtCeiling = setData.every(s =>
+  // Double progression's set-addition escape hatch: when there's no more weight
+  // to add and every set has reached the rep ceiling, add a set (cap optimal_sets).
+  // Reps-only (bodyweight/legacy freeze) has no weight axis at all; a capped
+  // exercise additionally requires every set to be pinned at the cap — a set still
+  // climbing toward it isn't stuck yet. Skipped sets are neutral throughout.
+  if ((repsOnly || capped) && setCount < sched.optimal_sets) {
+    const atCeiling = s =>
       s.logged && (s.logged.skipped ||
-        (s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max))
-    );
-    if (allAtCeiling) {
+        (s.logged.reps_done != null && s.logged.reps_done >= sched.rep_max));
+    const atCap = (s, i) => !capped || s.logged?.skipped ||
+      (nextTargets[i]?.weight != null && nextTargets[i].weight >= weightCap - 0.001);
+    const allStuck = setData.every((s, i) => atCeiling(s) && atCap(s, i));
+    if (allStuck) {
       recordSetCount(planId, session.session_dow, exerciseId, setCount + 1, nextDayStr);
       writeTarget.run(exerciseId, setCount + 1, nextTargets.at(-1)?.weight ?? null, sched.rep_min, nextDayStr, planId);
     }
@@ -474,8 +483,10 @@ router.get('/:id/recap', (req, res) => {
     for (const s of rows) {
       const w = s.w ?? 0;
       vol += w * s.r; reps += s.r;
-      if (w > topW)   topW = w;
-      if (s.r > topReps) topReps = s.r;
+      // Top set = heaviest weight, and the reps from THAT set (ties → most reps).
+      // Keeps top_weight × top_reps a set that was actually performed rather than
+      // stitching the max weight to the max reps from a different, lighter set.
+      if (w > topW || (w === topW && s.r > topReps)) { topW = w; topReps = s.r; }
     }
     return { topW, topReps, vol, reps, sets: rows.map(s => ({ weight: s.w, reps: s.r })) };
   };
@@ -489,7 +500,11 @@ router.get('/:id/recap', (req, res) => {
   for (const sc of sched) {
     const t = agg(session.id, sc.exercise_id);
     if (!t) continue; // not trained this session
-    const repsOnly = sc.equipment === 'bodyweight' || sc.pause_weight === 1;
+    // Only true bodyweight is reps-only here. A paused exercise (capped or the
+    // legacy freeze) still has a weight axis and shows a weight column on the
+    // card, so the recap treats it as weighted too — keeping the recap's
+    // verdict/display consistent with the card's per-set glyphs.
+    const repsOnly = sc.equipment === 'bodyweight';
     const p = prev ? agg(prev.id, sc.exercise_id) : null;
     const verdict = liftVerdict(t, p, { isBodyweight: repsOnly });
     const tempo = exerciseTempo(planId, sc.exercise_id, userId, session.id, session.date ?? todayStr(), repsOnly);

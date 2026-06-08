@@ -268,8 +268,10 @@ if (!cols('exercises').includes('rep_max'))
 
 // Per-user overrides of an exercise's training parameters (rep range, weight
 // increment, pause-weight flag). rep_min/rep_max/default_increment fall through
-// to the exercises-table default when NULL. pause_weight, when 1, freezes the
-// weight — progression then comes from reps and added sets only.
+// to the exercises-table default when NULL. pause_weight, when 1, enables a
+// weight cap: pause_cap_kg holds the ceiling (the heaviest set at activation) and
+// the algorithm progresses weight up to but never past it. A legacy row with
+// pause_weight=1 and pause_cap_kg NULL keeps the old reps-only freeze behaviour.
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_exercise_settings (
     user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -283,6 +285,10 @@ db.exec(`
 `);
 if (!cols('user_exercise_settings').includes('pause_weight'))
   db.exec('ALTER TABLE user_exercise_settings ADD COLUMN pause_weight INTEGER NOT NULL DEFAULT 0');
+// Weight cap (kg) for a paused exercise — the algorithm progresses weight up to
+// this value and no further. NULL = no cap (legacy reps-only freeze when paused).
+if (!cols('user_exercise_settings').includes('pause_cap_kg'))
+  db.exec('ALTER TABLE user_exercise_settings ADD COLUMN pause_cap_kg REAL');
 // Per-user ceiling for algorithm-driven set addition — the algorithm will not
 // auto-add sets beyond this value; NULL falls back to 6 (legacy hard-cap).
 if (!cols('user_exercise_settings').includes('optimal_sets'))

@@ -38,7 +38,8 @@ function makeSet(num, { targetW = 60, targetR = 8, loggedW = null, loggedR = nul
 
 const WEIGHTED = { repMin: 8, repMax: 12, increment: 2.5, equipment: 'barbell' };
 const BODYWEIGHT = { repMin: 8, repMax: 12, increment: 2.5, equipment: 'bodyweight' };
-const PAUSED = { repMin: 8, repMax: 12, increment: 2.5, equipment: 'dumbbell', pauseWeight: true };
+const PAUSED = { repMin: 8, repMax: 12, increment: 2.5, equipment: 'dumbbell', pauseWeight: true }; // legacy reps-only freeze
+const CAPPED = { repMin: 8, repMax: 12, increment: 2.5, equipment: 'dumbbell', weightCapKg: 25 };   // weight progresses up to the cap
 
 // ── setPerformance ─────────────────────────────────────────────────────────────
 
@@ -260,9 +261,9 @@ test('below target → hold at logged reps (not target, not rep max)', () => {
   assertEq(t.reps, 9);
 });
 
-// ── nextExerciseTargets — pause_weight ───────────────────────────────────────
+// ── nextExerciseTargets — pause_weight (legacy reps-only freeze) ─────────────
 
-console.log('\nnextExerciseTargets — pause_weight:');
+console.log('\nnextExerciseTargets — pause_weight (legacy freeze):');
 
 test('paused: carries weight from logged (not target weight)', () => {
   // User logged 70kg (different from target 60kg) — paused carries actual
@@ -277,6 +278,54 @@ test('paused: at repMax → reps hold at repMax', () => {
   const [t] = nextExerciseTargets(sets, PAUSED);
   assertEq(t.reps, 12);
   assertEq(t.weight, 60);
+});
+
+// ── nextExerciseTargets — weight cap (pause "cap" model) ─────────────────────
+// Weight progresses normally but never past weightCapKg. Lighter sets climb to
+// the cap; a set pinned at the cap holds at repMax instead of resetting reps.
+
+console.log('\nnextExerciseTargets — weight cap:');
+
+test('capped: set below cap at repMax → bumps toward cap, reps reset', () => {
+  // 22.5kg, hit repMax 12 → would bump +2.5 to 25 (== cap) → real increase, reps→repMin
+  const sets = [makeSet(1, { targetW: 22.5, targetR: 12, loggedW: 22.5, loggedR: 12 })];
+  const [t] = nextExerciseTargets(sets, CAPPED);
+  assertEq(t.weight, 25);
+  assertEq(t.reps, 8);
+});
+
+test('capped: bump clamped to the cap (never overshoots)', () => {
+  // 24kg + 2.5 = 26.5 would exceed cap 25 → clamp to 25 (still an increase), reps→repMin
+  const sets = [makeSet(1, { targetW: 24, targetR: 12, loggedW: 24, loggedR: 12 })];
+  const [t] = nextExerciseTargets(sets, CAPPED);
+  assertEq(t.weight, 25);
+  assertEq(t.reps, 8);
+});
+
+test('capped: set pinned at cap at repMax → holds at repMax (no reps reset)', () => {
+  const sets = [makeSet(1, { targetW: 25, targetR: 12, loggedW: 25, loggedR: 12 })];
+  const [t] = nextExerciseTargets(sets, CAPPED);
+  assertEq(t.weight, 25);
+  assertEq(t.reps, 12);
+});
+
+test('capped: below repMax climbs reps at the same weight (normal double progression)', () => {
+  const sets = [makeSet(1, { targetW: 20, targetR: 10, loggedW: 20, loggedR: 10 })];
+  const [t] = nextExerciseTargets(sets, CAPPED);
+  assertEq(t.weight, 20);
+  assertEq(t.reps, 11);
+});
+
+test('capped: multi-set — lighter set climbs, capped set holds, none exceed cap', () => {
+  const sets = [
+    makeSet(1, { targetW: 22.5, targetR: 12, loggedW: 22.5, loggedR: 12 }), // → 25 (cap), reps 8
+    makeSet(2, { targetW: 25,   targetR: 12, loggedW: 25,   loggedR: 12 }), // pinned at cap → hold 12
+  ];
+  const out = nextExerciseTargets(sets, CAPPED);
+  assert(out.every(t => t.weight <= 25 + 1e-9), 'no set exceeds the cap');
+  assertEq(out[0].weight, 25);
+  assertEq(out[1].weight, 25);
+  assertEq(out[1].reps, 12);
 });
 
 // ── Optimal sets: allAtCeiling check logic ────────────────────────────────────

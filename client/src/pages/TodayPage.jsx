@@ -487,9 +487,14 @@ function SetRow({
   let perf = null;
   if (isLogged && !outOfBand && Number.isFinite(loggedReps) && targetReps != null && set.prev_reps != null) {
     if (adj && adj.inBand && set.weight != null && set.weight > 0) {
-      const actualVol = toKg(parseFloat(effWeight)) * loggedReps;
+      const wKg = toKg(parseFloat(effWeight));
+      const actualVol = wKg * loggedReps;
       const targetVol = set.weight * set.reps;
-      perf = actualVol > targetVol + 0.01 ? 'up' : actualVol < targetVol - 0.01 ? 'down' : 'met';
+      // Tolerate the whole-rep rounding of the displayed (weight-adjusted) target:
+      // within half a rep of the target volume counts as "met", so hitting the
+      // shown rep target after a small weight deviation isn't mis-flagged ▲/▼.
+      const tol = wKg * 0.5;
+      perf = actualVol > targetVol + tol ? 'up' : actualVol < targetVol - tol ? 'down' : 'met';
     } else {
       perf = loggedReps > targetReps ? 'up' : loggedReps === targetReps ? 'met' : 'down';
     }

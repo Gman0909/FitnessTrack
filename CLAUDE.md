@@ -88,7 +88,7 @@ client/src/
 
 **Dynamic double progression** — purely performance-based, no subjective check-ins.
 
-`nextExerciseTargets(setData, { repMin, repMax, increment, equipment, pauseWeight, tempo })` — takes all sets for one exercise, returns next per-set targets. Each `setData` element may also carry `priorFloorMiss` (set was already sub-floor last session). It is **pure**; all history-derived signals are computed by the caller (`recomputeExercise`).
+`nextExerciseTargets(setData, { repMin, repMax, increment, equipment, pauseWeight, weightCapKg, tempo })` — takes all sets for one exercise, returns next per-set targets. Each `setData` element may also carry `priorFloorMiss` (set was already sub-floor last session). It is **pure**; all history-derived signals are computed by the caller (`recomputeExercise`).
 
 Each set is its own progression track, comparing the user's actual logged reps to the target they were given:
 
@@ -105,6 +105,7 @@ Each set is its own progression track, comparing the user's actual logged reps t
 - Rep range `[repMin, repMax]` is per exercise (`exercises.rep_min/rep_max`), overridable per user via `user_exercise_settings`.
 - **Adaptive tempo** (`opts.tempo`, computed in `recomputeExercise` from the last two completed sessions' volume ratio `logged/target`): two straight beats → `fast` (climb +2, larger increment); two straight shortfalls → `slow` (micro-increment); else `normal`. Bodyweight is always `normal`. Purely objective — no subjective input.
 - **Bodyweight**: reps-only axis; reps climb toward `repMax` and hold there — a set short of its target holds at its logged reps (same rule as weighted). When every set reaches `repMax`, `recomputeExercise` adds a set (cap 6).
+- **Pause weight increases (weight cap)** — `user_exercise_settings.pause_weight=1` + `pause_cap_kg` (the heaviest set when paused). Weighted progression runs normally but the per-set weight bump is clamped to the cap (`weightCapKg`); a set pinned at the cap holds at `repMax` instead of resetting reps. `recomputeExercise` adds a set only when every set is pinned at the cap *and* the rep ceiling. A legacy paused row with `pause_cap_kg` NULL keeps the old reps-only freeze (bodyweight stays reps-only too). Activation never rewrites existing per-set weights.
 - `setPerformance(targetReps, actualReps)` → `'up' | 'met' | 'down'` for the UI's per-set glyph.
 - **Weight-deviation re-targeting** — `weightAdjustedTarget(target, actualWeight, {repMin,repMax})`. When the logged/entered weight differs from the target's, the rep target is re-scaled to roughly preserve volume (`round(targetReps × targetWeight / actualWeight)`, clamped to the rep range). Within a ±15% band (`WEIGHT_BAND`) this adjusted target drives the hold-vs-climb decision and the UI glyph; beyond it `{inBand:false}` — the client shows `?` and suppresses the glyph, and progression climbs target-free from the logged performance. The client (`TodayPage` `SetRow`) re-evaluates on weight-cell blur.
 

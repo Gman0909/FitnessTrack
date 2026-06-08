@@ -45,12 +45,12 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
         pause_weight: pause ? 1 : 0,
       };
       if (optSetsChanged && optSets !== null) payload.optimal_sets = optSets;
-      // Freeze the working weight at the highest value currently shown on the
-      // card — overrides any progression the algorithm already wrote.
+      // Cap the working weight at the heaviest set currently on the card. The
+      // algorithm progresses weight up to but never past this; existing per-set
+      // weights are left untouched.
       if (pause && maxWeightKg != null && slot?.planId != null) {
-        payload.freeze_weight_kg  = maxWeightKg;
-        payload.freeze_plan_id    = slot.planId;
-        payload.freeze_set_count  = slot.setCount ?? 1;
+        payload.pause_cap_kg   = maxWeightKg;
+        payload.freeze_plan_id = slot.planId;
       }
       await api.updateExercise(exercise.id, payload);
       // For weighted (non-repsOnly) exercises, optimal sets = current set count —
@@ -145,7 +145,8 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
           <div style={{ flex: 1 }}>
             <span style={{ fontSize: '0.9rem', color: 'var(--text)' }}>Pause weight increases</span>
             <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: 'var(--dim)', lineHeight: 1.45 }}>
-              Freeze the load — progress by reps, then added sets. For limited
+              Caps the load at your heaviest set — lighter sets catch up to it and
+              reps keep progressing, but the weight won't go higher. For limited
               plates or injury recovery.
             </p>
           </div>

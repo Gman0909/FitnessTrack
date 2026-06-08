@@ -68,7 +68,10 @@ export function weightAdjustedTarget(target, actualWeight, opts = {}) {
 //   target: { weight, reps },                       // expected (the target shown this session)
 //   logged: { weight_used, reps_done, skipped },     // actual
 // }
-// opts: { repMin, repMax, increment, equipment, pauseWeight, tempo }
+// opts: { repMin, repMax, increment, equipment, pauseWeight, weightCapKg, tempo }
+//   weightCapKg: optional kg ceiling — weighted progression climbs up to but never
+//   past it (a paused exercise's cap). A set pinned at the cap holds at repMax
+//   rather than resetting reps. null/undefined = no cap.
 //   tempo: 'fast' | 'normal' | 'slow' (default 'normal') — see header.
 // Each setData element may also carry priorFloorMiss: true when the set's
 // previous logged session was already below repMin (drives the 2-strike deload).
@@ -78,6 +81,8 @@ export function nextExerciseTargets(setData, opts = {}) {
   const repMax    = opts.repMax ?? 12;
   const equipment = opts.equipment ?? 'barbell';
   const defaultIncrement = opts.increment ?? 2.5;
+  // Optional weight ceiling (kg): weighted progression climbs up to it, never past.
+  const weightCap = opts.weightCapKg ?? null;
   // Reps-only mode: bodyweight has no weight axis; pauseWeight deliberately
   // freezes a weighted exercise's load (limited plates / injury recovery) —
   // progression then comes from reps and, at the ceiling, added sets.
@@ -123,9 +128,15 @@ export function nextExerciseTargets(setData, opts = {}) {
     const baseW = lg.weight_used ?? t.weight ?? 0;
     const incr  = effectiveIncrement(baseW, defaultIncrement, incFactor);
 
-    // Reached/passed the ceiling → bump weight, reset reps to the floor.
+    // Reached/passed the ceiling → bump weight, reset reps to the floor. With a
+    // weight cap, the bump is clamped: if it produces a real increase (toward the
+    // cap) reps reset as usual; once pinned at the cap there's nowhere to go, so
+    // hold at repMax instead of pointlessly resetting reps.
     if (actualReps >= repMax) {
-      return { set_num: s.set_num, weight: Math.max(roundToHalf(baseW + incr), 0.5), reps: repMin };
+      const bumped = Math.max(roundToHalf(baseW + incr), 0.5);
+      const w = weightCap == null ? bumped : Math.min(bumped, weightCap);
+      if (w > baseW + 0.001) return { set_num: s.set_num, weight: w, reps: repMin };
+      return { set_num: s.set_num, weight: baseW, reps: repMax };
     }
     // Couldn't reach the floor → ease off, but only on the SECOND straight
     // sub-floor session; a single bad day holds the weight and re-attempts.

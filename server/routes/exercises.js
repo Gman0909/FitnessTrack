@@ -27,6 +27,7 @@ router.get('/', (req, res) => {
            COALESCE(ues.rep_max, e.rep_max)                     AS rep_max,
            COALESCE(ues.default_increment, e.default_increment) AS default_increment,
            COALESCE(ues.pause_weight, 0)                        AS pause_weight,
+           ues.pause_cap_kg                                      AS pause_cap_kg,
            ues.optimal_sets                                      AS optimal_sets
     FROM exercises e
     LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
@@ -47,7 +48,7 @@ router.post('/', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { name, muscle_group, equipment, default_increment, rep_min, rep_max, pause_weight, optimal_sets,
-          freeze_weight_kg, freeze_plan_id, freeze_set_count } = req.body;
+          pause_cap_kg, freeze_plan_id } = req.body;
   const exId = Number(req.params.id);
   const ex   = db.prepare('SELECT rep_min, rep_max FROM exercises WHERE id = ?').get(exId);
   if (!ex) return res.status(404).json({ error: 'Not found' });
@@ -75,48 +76,37 @@ router.patch('/:id', (req, res) => {
     }
     // Training parameters — personal override (NULL = fall back to default).
     if (rep_min !== undefined || rep_max !== undefined || default_increment !== undefined || pause_weight !== undefined || optimal_sets !== undefined) {
+      // pause_cap_kg follows pause_weight: set to the cap when pausing, cleared to
+      // NULL when resuming, left untouched when this PATCH doesn't touch pause.
+      const capChange = pause_weight === undefined ? 0 : 1;
+      const cap = pause_weight ? (pause_cap_kg ?? null) : null;
       db.prepare(`
-        INSERT INTO user_exercise_settings (user_id, exercise_id, rep_min, rep_max, default_increment, pause_weight, optimal_sets)
-        VALUES (@u, @e, @rmin, @rmax, @inc, COALESCE(@pause, 0), @optSets)
+        INSERT INTO user_exercise_settings (user_id, exercise_id, rep_min, rep_max, default_increment, pause_weight, pause_cap_kg, optimal_sets)
+        VALUES (@u, @e, @rmin, @rmax, @inc, COALESCE(@pause, 0), @cap, @optSets)
         ON CONFLICT(user_id, exercise_id) DO UPDATE SET
           rep_min           = COALESCE(@rmin,    rep_min),
           rep_max           = COALESCE(@rmax,    rep_max),
           default_increment = COALESCE(@inc,     default_increment),
           pause_weight      = COALESCE(@pause,   pause_weight),
+          pause_cap_kg      = CASE WHEN @capChange = 1 THEN @cap ELSE pause_cap_kg END,
           optimal_sets      = COALESCE(@optSets, optimal_sets)
       `).run({
         u: req.user.id, e: exId,
         rmin: rep_min ?? null, rmax: rep_max ?? null, inc: default_increment ?? null,
         pause: pause_weight === undefined ? null : (pause_weight ? 1 : 0),
+        capChange, cap,
         optSets: optimal_sets ?? null,
       });
     }
-    // Freeze working weight: overwrite any future-dated set_targets with the
-    // specified weight so the next session reflects what was shown on the card,
-    // not the algorithm's progression output.
-    if (pause_weight === 1 && freeze_weight_kg != null && freeze_plan_id != null) {
+    // Activating the cap: drop any algorithm-written future-dated targets so the
+    // next session is regenerated under the cap. Current/past per-set weights are
+    // left untouched (they are all <= cap, since the cap is the heaviest of them).
+    if (pause_weight === 1 && freeze_plan_id != null) {
       const plan = db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(freeze_plan_id, req.user.id);
       if (plan) {
-        const setCount = Math.max(1, parseInt(freeze_set_count, 10) || 1);
-        const today    = new Date().toISOString().split('T')[0];
-        // Remove rows the algorithm wrote for future sessions (e.g. progression
-        // bumps from the just-completed exercise) so our row is unambiguously latest.
+        const today = new Date().toISOString().split('T')[0];
         db.prepare('DELETE FROM set_targets WHERE exercise_id = ? AND plan_id = ? AND valid_from > ?')
           .run(exId, freeze_plan_id, today);
-        const getReps = db.prepare(`
-          SELECT reps FROM set_targets WHERE exercise_id = ? AND set_num = ? AND plan_id = ?
-          ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
-        `);
-        const uesRepMin  = db.prepare('SELECT rep_min FROM user_exercise_settings WHERE user_id = ? AND exercise_id = ?').get(req.user.id, exId)?.rep_min;
-        const fallback   = uesRepMin ?? ex.rep_min;
-        const insertTgt  = db.prepare(`
-          INSERT INTO set_targets (exercise_id, plan_id, set_num, weight, reps, valid_from, is_suggestion)
-          VALUES (?, ?, ?, ?, ?, ?, 0)
-        `);
-        for (let n = 1; n <= setCount; n++) {
-          const reps = getReps.get(exId, n, freeze_plan_id)?.reps ?? fallback;
-          insertTgt.run(exId, freeze_plan_id, n, freeze_weight_kg, reps, today);
-        }
       }
     }
   })();
