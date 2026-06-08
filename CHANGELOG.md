@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.3] - 2026-06-08
+
+### Changed
+- **"Pause weight increases" is now a weight *cap*, not a freeze-to-max.** Activating it records a cap equal to the heaviest set on the card and leaves every set's own weight untouched (previously it rewrote all sets to the max). Progression then continues normally but never above the cap — lighter sets climb toward it, reps keep progressing, and a set pinned at the cap holds at the rep ceiling. Backed by a new `pause_cap_kg` setting; legacy paused exercises (no stored cap) keep the old reps-only freeze.
+
+### Fixed
+- **Per-set glyph no longer mis-flags a matched target after a small weight change.** Logging the weight-adjusted target the card shows (e.g. 35×8 against a 36×8 prescription) read as ▼ because the glyph compared exact volume against the un-rounded original target. It now tolerates the whole-rep rounding of the displayed target (±half a rep), so hitting the shown target reads "=".
+- **Recap was inconsistent with the exercise cards.** Paused exercises were rendered reps-only in the recap (e.g. "11 → 10 reps ▼") while the card shows them as weighted — they're now treated as weighted in the recap too. The lift-by-lift "top set" also no longer stitches the heaviest weight to the highest reps from a *different* set (e.g. a never-performed "40×12"); it shows an actually-performed set.
+
+---
+
 ## [1.6.2] - 2026-06-04
 
 ### Added
