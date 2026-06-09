@@ -8,5 +8,4 @@ client/dist/
 .DS_Store
 Thumbs.db
 scripts/seed-demo.js
-scripts/deploy.env
 CLAUDE.md

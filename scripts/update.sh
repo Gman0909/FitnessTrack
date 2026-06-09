@@ -9,9 +9,13 @@ if systemctl is-enabled --quiet fitnesstrack 2>/dev/null; then
   sudo -v
 fi
 
-# Pull latest changes
-echo "Pulling latest changes..."
-git pull
+# Sync to the latest commit. Use fetch + reset --hard rather than `git pull` so
+# locally regenerated files — e.g. package-lock.json after npm rebuilds native
+# deps like better-sqlite3 on ARM — never block the update with a merge
+# conflict. Matches the in-app updater (server/routes/admin.js).
+echo "Syncing to latest..."
+git fetch origin
+git reset --hard origin/HEAD
 
 # Install / update dependencies
 echo "Installing dependencies..."
