@@ -110,10 +110,13 @@ export function nextExerciseTargets(setData, opts = {}) {
 
     // ── Reps-only axis (bodyweight or weight-paused) ────────────────────────
     if (repsOnly) {
-      // Weight is frozen — bodyweight carries its target weight; a paused
-      // weighted exercise stays at whatever load was actually used.
+      // Persist the load that was actually used so it propagates forward:
+      // bodyweight stores the entered bodyweight (the card seeds the next
+      // session from it), a paused weighted exercise stays at the load used.
+      // A bodyweight log that omitted the weight (0) keeps the prior target
+      // rather than overwriting a known bodyweight with 0.
       const weight = equipment === 'bodyweight'
-        ? t.weight
+        ? (lg.weight_used > 0 ? lg.weight_used : (t.weight ?? 0))
         : (lg.weight_used ?? t.weight ?? 0);
       const effActual = actualReps + overflow;
       overflow = Math.max(0, effActual - repMax);

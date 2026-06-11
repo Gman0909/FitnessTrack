@@ -253,6 +253,21 @@ test('skipped bodyweight set → carry forward unchanged', () => {
   assertEq(t.reps, 10);
 });
 
+test('persists the logged bodyweight forward (not the stale target)', () => {
+  // Stale 88.2kg target, user logs at their current 86kg bodyweight — the next
+  // target must carry 86 so the card seeds the last logged bodyweight.
+  const sets = [makeSet(1, { targetW: 88.2, targetR: 10, loggedW: 86, loggedR: 10 })];
+  const [t] = nextExerciseTargets(sets, BODYWEIGHT);
+  assertEq(t.weight, 86);
+  assertEq(t.reps, 11);
+});
+
+test('bodyweight log with no weight (0) keeps the prior target weight', () => {
+  const sets = [makeSet(1, { targetW: 88.2, targetR: 10, loggedW: 0, loggedR: 10 })];
+  const [t] = nextExerciseTargets(sets, BODYWEIGHT);
+  assertEq(t.weight, 88.2); // not overwritten with 0
+});
+
 test('below target → hold at logged reps (not target, not rep max)', () => {
   // Underperformance is treated the same as the weighted path: hold what was
   // logged so the set must be beaten before its target moves.
