@@ -78,6 +78,37 @@ test('no prior log → null', () => {
   assertEq(hint, null);
 });
 
+test('paused-weight: appended set surfaces as added volume', () => {
+  // Stiff Legged Deadlift W5D3: weight paused at 60kg cap, all sets held at the
+  // rep ceiling (12), and the algorithm appended a 4th set at the rep floor (6).
+  // The new set has no prior — it must still surface as added work.
+  const hint = computeProgressionHint({
+    ...base, repMin: 6, repMax: 12,
+    sets: [
+      { weight: 60, reps: 12, prev_weight: 60, prev_reps: 12 },
+      { weight: 60, reps: 12, prev_weight: 60, prev_reps: 12 },
+      { weight: 60, reps: 12, prev_weight: 60, prev_reps: 12 },
+      { weight: 60, reps: 6,  prev_weight: null, prev_reps: null },
+    ],
+  });
+  assertEq(hint.text, '▲ (+17%) +6 reps');
+  assertEq(hint.color, 'var(--success)');
+});
+
+test('bodyweight: appended set surfaces as added reps', () => {
+  // All prior sets held at the rep ceiling, a new set appended at the floor.
+  const hint = computeProgressionHint({
+    ...base, isBodyweight: true, repMin: 6, repMax: 12,
+    sets: [
+      { weight: 0, reps: 12, prev_weight: 0, prev_reps: 12 },
+      { weight: 0, reps: 12, prev_weight: 0, prev_reps: 12 },
+      { weight: 0, reps: 6,  prev_weight: null, prev_reps: null },
+    ],
+  });
+  assertEq(hint.text, '▲ +6 reps');
+  assertEq(hint.color, 'var(--success)');
+});
+
 test('bodyweight: reps-only delta', () => {
   const hint = computeProgressionHint({
     ...base, isBodyweight: true,

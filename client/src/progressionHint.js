@@ -27,6 +27,12 @@ export function computeProgressionHint({ sets, repMin, repMax, exerciseComplete,
       curReps  += Math.max(repMin, Math.min(repMax, s.reps));
       prevReps += s.prev_reps;
     }
+    // Algorithm-appended sets have no prior — they're pure added reps. Count
+    // their target toward this session so the extra set surfaces in the hint.
+    for (const s of sets) {
+      if (s.prev_reps != null) continue;
+      curReps += Math.max(repMin, Math.min(repMax, s.reps));
+    }
     const repsDelta = curReps - prevReps;
     if (repsDelta === 0) return null;
     const arrow = repsDelta > 0 ? '▲' : '▼';
@@ -49,6 +55,17 @@ export function computeProgressionHint({ sets, repMin, repMax, exerciseComplete,
     prevReps += s.prev_reps;
     const change = Math.abs(toDisp(s.weight) - toDisp(s.prev_weight));
     if (change > maxAbsWChange) { maxAbsWChange = change; mainSet = s; }
+  }
+  // Algorithm-appended sets (no prior, e.g. a paused-weight exercise that
+  // earned an extra set) are pure added volume — count their target toward
+  // "current" only. They aren't a per-set weight change, so they don't drive
+  // the weight delta; the positive volume/reps delta surfaces the added work.
+  for (const s of sets) {
+    if (s.prev_weight != null && s.prev_reps != null) continue;
+    if (!(s.weight > 0)) continue;
+    const tgtReps = Math.max(repMin, Math.min(repMax, s.reps));
+    curVol  += toDisp(s.weight) * tgtReps;
+    curReps += tgtReps;
   }
   const volDelta  = curVol - prevVol;
   const pct       = prevVol > 0 ? (volDelta / prevVol) * 100 : 0;
