@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { join, dirname } from 'path';
 import db, { dbPath } from '../db.js';
+import { selectProgressWeeks } from '../statsWeeks.js';
 
 const router = Router();
 
@@ -72,8 +73,8 @@ router.get('/', (req, res) => {
   // the FIRST recorded week against the most recent COMPLETED week within the
   // scoped period. Weeks are Monday-anchored (same ${WEEK_OF} as the weekly
   // chart) so a structured plan that repeats the same exercises each week gives
-  // a clean like-for-like comparison. The current, still-in-progress calendar
-  // week is excluded — only fully-elapsed weeks count as "completed to date".
+  // a clean like-for-like comparison. A fully-elapsed week always counts; the
+  // current calendar week counts once it's fully trained (see selectProgressWeeks).
   const weekRows = db.prepare(`
     SELECT e.muscle_group, ${WEEK_OF} AS week_start, SUM(ls.weight_used * ls.reps_done) AS volume
     FROM logged_sets ls
@@ -87,10 +88,21 @@ router.get('/', (req, res) => {
     `SELECT date('now', '-' || ((cast(strftime('%w','now') as integer) + 6) % 7) || ' days') AS cur`
   ).get();
 
-  const weeks     = [...new Set(weekRows.map(r => r.week_start))].sort();   // ascending
-  const completed = weeks.filter(w => w < cur);
-  const firstWeek = completed[0] ?? null;
-  const lastWeek  = completed.length > 1 ? completed[completed.length - 1] : null;
+  // Session counts per week (scoped) — `done` = checked_in sessions. Lets a
+  // current calendar week that's already fully trained count as completed.
+  const sessByWeek = new Map(
+    db.prepare(`
+      SELECT ${WEEK_OF} AS week_start,
+             COUNT(*) AS total,
+             SUM(CASE WHEN s.checked_in = 1 THEN 1 ELSE 0 END) AS done
+      FROM sessions s
+      WHERE ${SCOPE} AND s.date IS NOT NULL
+      GROUP BY week_start
+    `).all(...P).map(r => [r.week_start, r])
+  );
+
+  const weeks = [...new Set(weekRows.map(r => r.week_start))].sort();   // ascending
+  const { firstWeek, lastWeek } = selectProgressWeeks(weeks, cur, sessByWeek);
 
   let muscle_progress = [];
   if (firstWeek && lastWeek) {
