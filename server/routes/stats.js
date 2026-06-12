@@ -41,9 +41,18 @@ router.get('/', (req, res) => {
   `).get(...P);
 
   let avg_per_week = 0;
-  if (ov.first_date && ov.last_date && ov.total_workouts > 0) {
-    const days = Math.max(7, (new Date(ov.last_date) - new Date(ov.first_date)) / 86400000 + 1);
-    avg_per_week = +(ov.total_workouts / (days / 7)).toFixed(1);
+  if (ov.total_workouts > 0) {
+    // Divide by the number of distinct training weeks (Monday-anchored, same
+    // ${WEEK_OF} as the weekly chart), not the raw first→last day span. The
+    // span ends on the last workout rather than the end of its week, so a clean
+    // 4-per-week pattern measured that way reads ~4.2; counting whole training
+    // weeks gives the true 4.0.
+    const { week_count } = db.prepare(`
+      SELECT COUNT(DISTINCT ${WEEK_OF}) AS week_count
+      FROM sessions s JOIN logged_sets ls ON ls.session_id = s.id
+      WHERE ${SCOPE} AND ls.skipped = 0 AND ls.reps_done IS NOT NULL AND ls.weight_used IS NOT NULL
+    `).get(...P);
+    if (week_count > 0) avg_per_week = +(ov.total_workouts / week_count).toFixed(1);
   }
 
   const weekly_volume = db.prepare(`
