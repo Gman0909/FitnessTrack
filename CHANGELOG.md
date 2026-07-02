@@ -9,6 +9,16 @@
 
 ---
 
+## [1.6.5] - 2026-06-12
+
+### Fixed
+- **Average workouts/week no longer over-counts.** `avg_per_week` divided total workouts by the first→last-day span, which ends on the last workout rather than the end of its week — so a clean 4-per-week pattern read ~4.2. It now counts distinct Monday-anchored training weeks (the same `WEEK_OF` the weekly chart uses), giving the true 4.0.
+- **"Progress by Muscle Group" now admits a fully-trained current week.** The comparison week was gated on the calendar week being fully elapsed, so a week finished early (e.g. all sessions done by Friday) was withheld until the following Monday and the comparison stayed stuck on the prior week. The current week is now admitted once every session in it is complete and it has at least as many sessions as the last fully-elapsed week. (Boundary logic extracted to a unit-tested `server/statsWeeks.js`.)
+- **Logged bodyweight now persists forward for bodyweight exercises.** Progression carried the prior target weight forward and discarded the logged bodyweight, so the TodayPage bodyweight input (seeded from `set_targets`) never reflected the user's last logged bodyweight (e.g. a stuck 88.2 kg). It now stores `weight_used` (when > 0), self-healing on the next logged session.
+- **Progression hint now surfaces for algorithm-appended sets.** An appended set (e.g. a paused-weight exercise that earned an extra set at the rep floor) has no prior logged session, so it was dropped from the overload hint and the whole hint could collapse to null. Appended sets now count toward current volume/reps, so the added work shows up as overload feedback.
+
+---
+
 ## [1.6.4] - 2026-06-08
 
 ### Added
