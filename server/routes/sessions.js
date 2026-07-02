@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { nextExerciseTargets } from '../../shared/algorithm.js';
-import { liftVerdict, summarizeVerdicts } from '../../shared/recap.js';
+import { nextExerciseTargets, weightAdjustedTarget, setPerformance } from '../../shared/algorithm.js';
+import { liftVerdict, summarizeVerdicts, capVerdictToTargets } from '../../shared/recap.js';
 import { slotDone } from '../../shared/slotDone.js';
 import { effectiveSetCount, recordSetCount, clearSetCountAt } from '../setCounts.js';
 
@@ -453,7 +453,9 @@ router.get('/:id/recap', (req, res) => {
 
   const sched = db.prepare(`
     SELECT s.exercise_id, s.position, e.name, e.muscle_group, e.equipment,
-           COALESCE(ues.pause_weight, 0) AS pause_weight
+           COALESCE(ues.pause_weight, 0) AS pause_weight,
+           COALESCE(ues.rep_min, e.rep_min) AS rep_min,
+           COALESCE(ues.rep_max, e.rep_max) AS rep_max
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
     LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
     WHERE s.plan_id IS ? AND s.day_of_week = ?
@@ -495,6 +497,34 @@ router.get('/:id/recap', (req, res) => {
      WHERE ls.exercise_id = ? AND s.user_id = ? AND ls.skipped = 0 AND s.id <> ?`
   ).get(exId, userId, session.id).m;
 
+  // Did every logged set fall short of the target it was given? Mirrors the
+  // workout card's per-set ▼ glyph: the target in effect for THIS session
+  // (bounded by its date, like GET /today), re-scaled for any weight deviation.
+  // A set with no target, or an out-of-band weight (glyph suppressed on the
+  // card), is indeterminate — not a definite miss — and makes this false, so
+  // the target-aware ceiling never fires on ambiguous data.
+  const loggedSetsFor = db.prepare(
+    'SELECT set_num, weight_used AS w, reps_done AS r FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND skipped = 0 AND reps_done IS NOT NULL'
+  );
+  const targetForSet = db.prepare(`
+    SELECT weight, reps FROM set_targets
+    WHERE exercise_id = ? AND set_num = ? AND plan_id IS ?
+      AND (? IS NULL OR valid_from <= ?)
+    ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
+  `);
+  const missedEveryTarget = (exId, repMin, repMax) => {
+    const rows = loggedSetsFor.all(session.id, exId);
+    if (!rows.length) return false;
+    for (const s of rows) {
+      const tgt = targetForSet.get(exId, s.set_num, planId, session.date, session.date);
+      if (!tgt) return false;
+      const adj = weightAdjustedTarget(tgt, s.w, { repMin, repMax });
+      if (!adj.inBand) return false;
+      if (setPerformance(adj.reps, s.r) !== 'down') return false;
+    }
+    return true;
+  };
+
   const exercises = [];
   let thisVol = 0, prevVol = 0, repsAdded = 0;
   for (const sc of sched) {
@@ -506,7 +536,11 @@ router.get('/:id/recap', (req, res) => {
     // verdict/display consistent with the card's per-set glyphs.
     const repsOnly = sc.equipment === 'bodyweight';
     const p = prev ? agg(prev.id, sc.exercise_id) : null;
-    const verdict = liftVerdict(t, p, { isBodyweight: repsOnly });
+    const rawVerdict = liftVerdict(t, p, { isBodyweight: repsOnly });
+    // Only 'up' can be capped; skip the per-set query work otherwise.
+    const verdict = rawVerdict === 'up'
+      ? capVerdictToTargets(rawVerdict, missedEveryTarget(sc.exercise_id, sc.rep_min, sc.rep_max))
+      : rawVerdict;
     const tempo = exerciseTempo(planId, sc.exercise_id, userId, session.id, session.date ?? todayStr(), repsOnly);
 
     let pr = null;

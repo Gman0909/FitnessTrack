@@ -1,5 +1,5 @@
 // Recap verdict tests — run with: node shared/recap.test.js
-import { liftVerdict, summarizeVerdicts } from './recap.js';
+import { liftVerdict, summarizeVerdicts, capVerdictToTargets } from './recap.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -34,6 +34,21 @@ test('bodyweight: more reps → up', () =>
 
 test('bodyweight: fewer reps → down', () =>
   assertEq(liftVerdict({ topW: 0, vol: 0, reps: 22 }, { topW: 0, vol: 0, reps: 24 }, { isBodyweight: true }), 'down'));
+
+console.log('\ncapVerdictToTargets:');
+
+test('up + missed every target → held', () =>
+  assertEq(capVerdictToTargets('up', true), 'held'));
+
+test('up + met a target → up (unchanged)', () =>
+  assertEq(capVerdictToTargets('up', false), 'up'));
+
+test('non-up verdicts pass through even when every target missed', () => {
+  assertEq(capVerdictToTargets('down', true), 'down');
+  assertEq(capVerdictToTargets('eased', true), 'eased');
+  assertEq(capVerdictToTargets('held', true), 'held');
+  assertEq(capVerdictToTargets('new', true), 'new');
+});
 
 console.log('\nsummarizeVerdicts:');
 

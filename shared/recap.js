@@ -29,6 +29,17 @@ export function liftVerdict(thisAgg, prev, { isBodyweight = false } = {}) {
   return 'held';
 }
 
+// A week-on-week 'up' can still mask a session where every set fell short of
+// the target the algorithm prescribed — targets climbed faster than the lifter,
+// yet this week still edged out last week's actuals. When that happens, cap the
+// verdict at 'held' so the recap doesn't read as a clean win over a lift the
+// workout card marked red (▼ vs target) on every set. Only 'up' is affected;
+// 'eased'/'down'/'held'/'new' already reflect a non-winning or non-comparable
+// state, so they pass through unchanged.
+export function capVerdictToTargets(verdict, missedEveryTarget) {
+  return verdict === 'up' && missedEveryTarget ? 'held' : verdict;
+}
+
 // Roll a list of verdicts into headline counts. `comparable` excludes 'new'
 // lifts (nothing to compare), which is what "N of M up on last week" counts.
 export function summarizeVerdicts(verdicts) {

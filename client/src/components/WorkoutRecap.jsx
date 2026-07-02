@@ -196,7 +196,7 @@ export function WorkoutRecap({ data, onClose }) {
                 </div>
               )}
               {data.reps_added > 0 && (
-                <div style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>+{data.reps_added} reps over {vsLabel}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text)' }}>Overall <strong>+{data.reps_added} reps</strong> over {vsLabel}</div>
               )}
               {fast && (
                 <div style={{ fontSize: '0.9rem', color: 'var(--success)' }}>On a roll — <strong style={{ color: 'var(--text)' }}>{fast.name}</strong> is on a fast track</div>
