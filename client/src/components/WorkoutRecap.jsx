@@ -47,29 +47,40 @@ function Star({ size = 13, color = '#f0a030' }) {
   );
 }
 
-// Thin progress ring — green arc = lifts up, amber arc = lifts held (drawn right
-// after the green), grey track = the rest; centre counts the lifts-up number.
-function Ring({ up, held, total }) {
+// Thin progress ring — verdict arcs drawn head-to-tail from the top, mirroring
+// the segmented bar's colours: green up, amber held/eased, red down. Together
+// they fill the ring (up+held+eased+down = comparable = total); centre counts
+// the lifts-up number.
+function Ring({ up, held, eased, down, total }) {
   const r = 52, C = 2 * Math.PI * r;
-  const upFrac   = total > 0 ? up / total : 0;
-  const heldFrac = total > 0 ? held / total : 0;
   const reduce = reduceMotion();
   const [fill, setFill] = useState(reduce ? 1 : 0);
   const num = useCountUp(up, 650);
   useEffect(() => { if (reduce) return; const t = setTimeout(() => setFill(1), 60); return () => clearTimeout(t); }, [reduce]);
-  const upLen = C * upFrac * fill, heldLen = C * heldFrac * fill;
   const ease = 'cubic-bezier(.4,0,.2,1)';
+  const trans = reduce ? 'none' : `stroke-dashoffset 0.9s ${ease}, stroke-dasharray 0.9s ${ease}`;
+
+  const segs = [
+    { n: up,           color: 'var(--success)' },
+    { n: held + eased, color: '#f0a030' },
+    { n: down,         color: 'var(--danger)' },
+  ];
+  let acc = 0;
+  const arcs = segs.map((s, i) => {
+    if (!s.n || total <= 0) return null;
+    const startLen = C * (acc / total) * fill;
+    const len      = C * (s.n / total) * fill;
+    acc += s.n;
+    return (
+      <circle key={i} cx="64" cy="64" r={r} fill="none" stroke={s.color} strokeWidth="9" strokeLinecap="round"
+        strokeDasharray={`${len} ${C}`} strokeDashoffset={-startLen} style={{ transition: trans }} />
+    );
+  });
   return (
     <div style={{ position: 'relative', width: 128, height: 128 }}>
       <svg width="128" height="128" style={{ transform: 'rotate(-90deg)' }}>
         <circle cx="64" cy="64" r={r} fill="none" stroke="var(--border)" strokeWidth="9" />
-        <circle cx="64" cy="64" r={r} fill="none" stroke="var(--success)" strokeWidth="9" strokeLinecap="round"
-          strokeDasharray={C} strokeDashoffset={C - upLen} style={{ transition: reduce ? 'none' : `stroke-dashoffset 0.9s ${ease}` }} />
-        {heldFrac > 0 && (
-          <circle cx="64" cy="64" r={r} fill="none" stroke="#f0a030" strokeWidth="9" strokeLinecap="round"
-            strokeDasharray={`${heldLen} ${C}`} strokeDashoffset={-upLen}
-            style={{ transition: reduce ? 'none' : `stroke-dashoffset 0.9s ${ease}, stroke-dasharray 0.9s ${ease}` }} />
-        )}
+        {arcs}
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontSize: '2.1rem', fontWeight: 800, color: 'var(--text)', lineHeight: 1 }}>{Math.round(num)}</span>
@@ -152,7 +163,7 @@ export function WorkoutRecap({ data, onClose }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem' }}>
             <span style={{ fontSize: '1.35rem', fontWeight: 800, color: hero.color }}>{hero.head}</span>
-            <Ring up={data.lifts_up} held={counts.held} total={data.lifts_comparable} />
+            <Ring up={counts.up} held={counts.held} eased={counts.eased} down={counts.down} total={data.lifts_comparable} />
             <span style={{ color: 'var(--muted)', fontSize: '0.95rem', textAlign: 'center', maxWidth: 320 }}>{hero.sub}</span>
             <span style={{ color: 'var(--muted)', fontSize: '0.92rem' }}>
               {volLine} {unit}·reps

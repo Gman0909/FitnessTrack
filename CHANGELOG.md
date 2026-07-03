@@ -1,10 +1,10 @@
 # Changelog
 
-## [1.7.0] - 2026-07-02
+## [1.7.0] - 2026-07-03
 
 ### Changed
-- **Recap verdicts are now target-aware.** A lift that beat last week on volume but fell short of its prescribed target on *every* set is no longer counted as a win — its week-on-week "up" is capped to "held". This keeps the recap consistent with the workout card's per-set ▼ glyphs (which compare against the target you were given), so a session where the targets climbed faster than you did no longer reads as a clean "up" on a lift you missed on every set.
-- **Held lifts read amber in the recap.** The hero ring now draws an amber arc for held lifts immediately after the green "up" arc (over the grey remainder), and the per-lift segmented bar shows held segments in amber instead of dimmed grey.
+- **Recap verdicts are now target-aware — both ways.** A lift that beat last week on volume but fell short of its target on *every* set is no longer counted as a win (its "up" caps to "held"); conversely, a lift where you met or beat the target on *every* set is never marked red even if week-on-week volume dipped (its "down" floors to "held"). The latter fixes the case where lower sets get heavier and their reps reset — total volume dips while every prescribed set was hit. Both keep the recap consistent with the workout card's per-set glyphs (which compare against the target you were given).
+- **The hero ring now mirrors the segmented bar's verdict colours.** Instead of showing only the green "up" fraction over a grey track, the ring draws consecutive arcs — green up, amber held/eased, red down — so a red lift reads red in both the ring and the bar. Held segments in the bar are amber at full opacity rather than dimmed grey.
 - **"Overall" prefix on the recap reps highlight.** The "+N reps over last week" line is now bolded and prefixed with "Overall" so it reads as a session-wide total rather than a note about the exercise in the highlight above it.
 
 ---

@@ -40,6 +40,16 @@ export function capVerdictToTargets(verdict, missedEveryTarget) {
   return verdict === 'up' && missedEveryTarget ? 'held' : verdict;
 }
 
+// The mirror of the ceiling: a week-on-week 'down' can penalise a lift where
+// you met or beat the target on every set — e.g. lower sets got heavier and
+// their reps reset, so total volume dipped even though every prescribed set was
+// hit. When that happens, floor the verdict at 'held' so the recap doesn't mark
+// a lift red (▼) that the workout card showed as all met/beat. Only 'down' is
+// affected.
+export function floorVerdictToTargets(verdict, metEveryTarget) {
+  return verdict === 'down' && metEveryTarget ? 'held' : verdict;
+}
+
 // Roll a list of verdicts into headline counts. `comparable` excludes 'new'
 // lifts (nothing to compare), which is what "N of M up on last week" counts.
 export function summarizeVerdicts(verdicts) {

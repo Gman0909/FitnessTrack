@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { nextExerciseTargets, weightAdjustedTarget, setPerformance } from '../../shared/algorithm.js';
-import { liftVerdict, summarizeVerdicts, capVerdictToTargets } from '../../shared/recap.js';
+import { liftVerdict, summarizeVerdicts, capVerdictToTargets, floorVerdictToTargets } from '../../shared/recap.js';
 import { slotDone } from '../../shared/slotDone.js';
 import { effectiveSetCount, recordSetCount, clearSetCountAt } from '../setCounts.js';
 
@@ -497,12 +497,13 @@ router.get('/:id/recap', (req, res) => {
      WHERE ls.exercise_id = ? AND s.user_id = ? AND ls.skipped = 0 AND s.id <> ?`
   ).get(exId, userId, session.id).m;
 
-  // Did every logged set fall short of the target it was given? Mirrors the
-  // workout card's per-set ▼ glyph: the target in effect for THIS session
-  // (bounded by its date, like GET /today), re-scaled for any weight deviation.
+  // How did every logged set do against the target it was given? Mirrors the
+  // workout card's per-set glyph: the target in effect for THIS session (bounded
+  // by its date, like GET /today), re-scaled for any weight deviation. Returns
+  // whether every set missed (all ▼) and whether every set met-or-beat (no ▼).
   // A set with no target, or an out-of-band weight (glyph suppressed on the
-  // card), is indeterminate — not a definite miss — and makes this false, so
-  // the target-aware ceiling never fires on ambiguous data.
+  // card), is indeterminate — neither — so both flags go false and the
+  // target-aware ceiling/floor never fire on ambiguous data.
   const loggedSetsFor = db.prepare(
     'SELECT set_num, weight_used AS w, reps_done AS r FROM logged_sets WHERE session_id = ? AND exercise_id = ? AND skipped = 0 AND reps_done IS NOT NULL'
   );
@@ -512,17 +513,19 @@ router.get('/:id/recap', (req, res) => {
       AND (? IS NULL OR valid_from <= ?)
     ORDER BY is_suggestion ASC, valid_from DESC LIMIT 1
   `);
-  const missedEveryTarget = (exId, repMin, repMax) => {
+  const targetOutcome = (exId, repMin, repMax) => {
     const rows = loggedSetsFor.all(session.id, exId);
-    if (!rows.length) return false;
+    if (!rows.length) return { allMissed: false, allMet: false };
+    let allMissed = true, allMet = true;
     for (const s of rows) {
       const tgt = targetForSet.get(exId, s.set_num, planId, session.date, session.date);
-      if (!tgt) return false;
+      if (!tgt) return { allMissed: false, allMet: false };
       const adj = weightAdjustedTarget(tgt, s.w, { repMin, repMax });
-      if (!adj.inBand) return false;
-      if (setPerformance(adj.reps, s.r) !== 'down') return false;
+      if (!adj.inBand) return { allMissed: false, allMet: false };
+      if (setPerformance(adj.reps, s.r) === 'down') allMet = false;
+      else allMissed = false;
     }
-    return true;
+    return { allMissed, allMet };
   };
 
   const exercises = [];
@@ -537,10 +540,14 @@ router.get('/:id/recap', (req, res) => {
     const repsOnly = sc.equipment === 'bodyweight';
     const p = prev ? agg(prev.id, sc.exercise_id) : null;
     const rawVerdict = liftVerdict(t, p, { isBodyweight: repsOnly });
-    // Only 'up' can be capped; skip the per-set query work otherwise.
-    const verdict = rawVerdict === 'up'
-      ? capVerdictToTargets(rawVerdict, missedEveryTarget(sc.exercise_id, sc.rep_min, sc.rep_max))
-      : rawVerdict;
+    // Only 'up'/'down' are target-adjusted; skip the per-set query work otherwise.
+    // Ceiling: missed every target → 'up' caps to 'held'.
+    // Floor:   met every target    → 'down' floors to 'held'.
+    let verdict = rawVerdict;
+    if (rawVerdict === 'up' || rawVerdict === 'down') {
+      const { allMissed, allMet } = targetOutcome(sc.exercise_id, sc.rep_min, sc.rep_max);
+      verdict = floorVerdictToTargets(capVerdictToTargets(rawVerdict, allMissed), allMet);
+    }
     const tempo = exerciseTempo(planId, sc.exercise_id, userId, session.id, session.date ?? todayStr(), repsOnly);
 
     let pr = null;
