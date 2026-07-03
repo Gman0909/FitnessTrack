@@ -571,8 +571,10 @@ router.get('/:id/recap', (req, res) => {
   }
 
   const counts = summarizeVerdicts(exercises.map(e => e.verdict));
+  // One-decimal precision so the client can keep the true sign of a sub-1%
+  // change (a +0.4% session shouldn't round to a flat "0%").
   const volDeltaPct = (comparison !== 'baseline' && prevVol > 0)
-    ? Math.round((thisVol - prevVol) / prevVol * 100) : null;
+    ? Math.round((thisVol - prevVol) / prevVol * 1000) / 10 : null;
 
   let biggest = null;
   for (const e of exercises) {

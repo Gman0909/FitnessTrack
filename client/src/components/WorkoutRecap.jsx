@@ -126,6 +126,13 @@ export function WorkoutRecap({ data, onClose }) {
 
   const volCount = useCountUp(volume.this, 650);
 
+  // Volume delta: arrow/colour follow the true sign (so a sub-1% change still
+  // reads up/down, not a flat "0%"); the number shows one decimal below 1% and
+  // a clean integer at or above it.
+  const dp = volume.delta_pct;
+  const dpDir = dp == null ? null : dp > 0 ? 1 : dp < 0 ? -1 : 0;
+  const dpShown = dp == null ? null : (dp !== 0 && Math.abs(dp) < 1 ? dp : Math.round(dp));
+
   // Verdict-driven hero headline (keeps a rough week encouraging).
   let hero = null;
   if (!baseline) {
@@ -167,9 +174,9 @@ export function WorkoutRecap({ data, onClose }) {
             <span style={{ color: 'var(--muted)', fontSize: '0.95rem', textAlign: 'center', maxWidth: 320 }}>{hero.sub}</span>
             <span style={{ color: 'var(--muted)', fontSize: '0.92rem' }}>
               {volLine} {unit}·reps
-              {volume.delta_pct != null && (
-                <span style={{ color: volume.delta_pct > 0 ? 'var(--success)' : volume.delta_pct < 0 ? 'var(--danger)' : 'var(--muted)', fontWeight: 600 }}>
-                  {'  ·  '}{volume.delta_pct > 0 ? '▲' : volume.delta_pct < 0 ? '▼' : '→'} {volume.delta_pct > 0 ? '+' : ''}{volume.delta_pct}%
+              {dpDir != null && (
+                <span style={{ color: dpDir > 0 ? 'var(--success)' : dpDir < 0 ? 'var(--danger)' : 'var(--muted)', fontWeight: 600 }}>
+                  {'  ·  '}{dpDir > 0 ? '▲' : dpDir < 0 ? '▼' : '→'} {dpDir > 0 ? '+' : ''}{dpShown}%
                 </span>
               )}
             </span>

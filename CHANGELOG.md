@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2] - 2026-07-03
+
+### Fixed
+- **The recap's session-volume delta no longer flattens a small change to "0%".** A sub-1% week-on-week change (e.g. +0.4%) was rounded to a whole percent and shown as a grey "→ 0%", hiding a genuine gain. The arrow and colour now follow the true sign, and the figure shows one decimal below 1% (e.g. "▲ +0.4%") and a clean integer at or above it.
+
+---
+
 ## [1.7.1] - 2026-07-03
 
 ### Fixed
