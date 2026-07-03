@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.3] - 2026-07-03
+
+### Fixed
+- **Personal Bests now shows the best reps at your heaviest weight.** When an exercise's top weight was hit at several rep counts (e.g. 41 kg × 10, × 11 and × 12), the table collapsed to an arbitrary row — often understating it (showing 41×10 instead of your 41×12). It now reports the most reps logged at that weight, in both the Stats table and the CSV export.
+
+---
+
 ## [1.7.2] - 2026-07-03
 
 ### Fixed

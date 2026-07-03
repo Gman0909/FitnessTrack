@@ -130,9 +130,13 @@ router.get('/', (req, res) => {
   // exercises are excluded here: their logged "weight" is just the user's
   // bodyweight, which would always rank them at the top. They get a separate
   // list below, ranked by reps (the real record for a bodyweight movement).
+  // The WHERE clause keeps only rows at the exercise's heaviest weight; when
+  // that weight was hit at several rep counts, MAX(reps_done) reports the best
+  // one (and, being the sole min/max aggregate, pulls the other bare columns
+  // from that same row) — otherwise GROUP BY would collapse to an arbitrary set.
   const personal_bests = db.prepare(`
     SELECT e.id AS exercise_id, e.name, e.muscle_group,
-           ls.weight_used AS max_weight, ls.reps_done
+           ls.weight_used AS max_weight, MAX(ls.reps_done) AS reps_done
     FROM logged_sets ls
     JOIN sessions s  ON s.id  = ls.session_id
     JOIN exercises e ON e.id  = ls.exercise_id
@@ -242,7 +246,7 @@ router.get('/export', (req, res) => {
   if (type === 'personal_bests') {
     const rows = db.prepare(`
       SELECT e.name AS exercise, e.muscle_group,
-             ls.weight_used AS max_weight_kg, ls.reps_done AS reps, s.date
+             ls.weight_used AS max_weight_kg, MAX(ls.reps_done) AS reps, s.date
       FROM logged_sets ls
       JOIN sessions s  ON s.id  = ls.session_id
       JOIN exercises e ON e.id  = ls.exercise_id
