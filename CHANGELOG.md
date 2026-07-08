@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.4] - 2026-07-08
+
+### Changed
+- **The recap headline is now volume-aware.** A "lifts up" session whose total tonnage dropped notably (≥5%) — typically a weight bump with reps reset — no longer reads as a clean green "Strong session". It's reframed as "Solid session — N lifts heavier, but volume down", so the headline agrees with the ▼ volume delta and the downward sparkline instead of contradicting them. Genuinely strong sessions (lifts up *and* volume up) are unaffected, and a rough session still reads "Tough".
+
+---
+
 ## [1.7.3] - 2026-07-03
 
 ### Fixed

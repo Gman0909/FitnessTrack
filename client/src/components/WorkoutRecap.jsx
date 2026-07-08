@@ -138,9 +138,15 @@ export function WorkoutRecap({ data, onClose }) {
   if (!baseline) {
     const comp = data.lifts_comparable, ratio = comp > 0 ? data.lifts_up / comp : 0;
     const rough = (counts.down + counts.eased) > data.lifts_up;
+    // A "lifts up" session whose total tonnage dropped notably — usually a
+    // weight bump with reps reset. Name the volume dip so the headline agrees
+    // with the ▼ delta and the sparkline below instead of reading "Strong".
+    const volDown = volume.delta_pct != null && volume.delta_pct <= -5;
+    const heavier = exercises.filter(e => !e.is_bodyweight && e.prev && e.this.top_weight > e.prev.top_weight).length;
     if (comp === 0)                 hero = { head: 'Session logged', sub: `vs ${vsLabel}`, color: 'var(--text)' };
-    else if (ratio >= 0.6)          hero = { head: 'Strong session', sub: `lifts up on ${vsLabel}`, color: 'var(--success)' };
     else if (rough || ratio < 0.34) hero = { head: 'Tough session',  sub: `held the line — the targets ease off, so ${vsLabel === 'last week' ? 'next week' : 'next time'}’s a fresh shot`, color: '#f0a030' };
+    else if (volDown)               hero = { head: 'Solid session',  sub: heavier > 0 ? `${heavier} lift${heavier > 1 ? 's' : ''} heavier, but volume down` : `lifts up on ${vsLabel}, but volume down`, color: 'var(--text)' };
+    else if (ratio >= 0.6)          hero = { head: 'Strong session', sub: `lifts up on ${vsLabel}`, color: 'var(--success)' };
     else                            hero = { head: 'Solid session',  sub: `lifts up on ${vsLabel}`, color: 'var(--text)' };
   }
 
