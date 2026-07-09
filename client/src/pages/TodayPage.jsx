@@ -427,7 +427,6 @@ function SetRow({
   );
 
   const weightFilled = isBodyweight ? bodyweightStr !== '' : weight !== '';
-  const canLog   = !isReadOnly && (status === 'logged' || (weightFilled && reps !== '' && parseInt(reps, 10) >= 1));
   const isLogged = status === 'logged';
   const inputStyle = { ...pill, width:'100%', color:'var(--text)', outline:'none', textAlign:'center', padding:0,
     borderColor: isLogged ? 'var(--success)' : 'var(--border)', opacity: isReadOnly ? 0.6 : 1 };
@@ -478,6 +477,14 @@ function SetRow({
     : null;
   const outOfBand  = adj != null && !adj.inBand;
   const targetReps = (adj && adj.inBand) ? adj.reps : Math.max(repMin, Math.min(repMax, set.reps ?? repMin));
+
+  // The tick activates only when both weight and reps hold a usable value —
+  // typed, or available as a recommendation. Weight's recommendation is the
+  // pre-filled target (weightFilled covers it); reps has a recommendation
+  // whenever the weight is in-band (out-of-band shows "?" and needs a typed
+  // value). Clicking with reps blank logs the recommendation (see handleLog).
+  const repsEntered = reps !== '' && parseInt(reps, 10) >= 1;
+  const canLog = !isReadOnly && (isLogged || (weightFilled && (repsEntered || !outOfBand)));
 
   // Actual-vs-target glyph. Suppressed on first-time sets and out-of-band
   // weight deviations. Within the ±15% weight band, volume (kg × reps) drives
@@ -1193,16 +1200,36 @@ export default function TodayPage() {
     if (!ex) return;
     const set = ex.sets.find(s => s.set_num === setNum);
     const cur = getStatus(exId, setNum);
-    const repsDone = parseInt(cur.reps, 10);
-    if (!repsDone || repsDone < 1) return;
     const isBW = ex.equipment === 'bodyweight';
     const bwStr = bodyweightValues.get(exId);
+
+    // Reps: the typed value, or — when left blank — the recommendation shown in
+    // the placeholder (the weight-adjusted target within band, else the plain
+    // target). An out-of-band weight has no comparable target, so blank reps
+    // can't be logged (the tick is disabled in that case too).
+    let repsDone = parseInt(cur.reps, 10);
+    let usedRec = false;
+    if (!repsDone || repsDone < 1) {
+      const repMin = ex.rep_min, repMax = ex.rep_max;
+      let rec = null;
+      if (!isBW && set?.weight != null && cur.weight !== '') {
+        const adj = weightAdjustedTarget({ weight: set.weight, reps: set.reps }, toKg(parseFloat(cur.weight)), { repMin, repMax });
+        rec = adj.inBand ? adj.reps : null;
+      } else if (set) {
+        rec = Math.max(repMin, Math.min(repMax, set.reps ?? repMin));
+      }
+      if (!rec || rec < 1) return;
+      repsDone = rec;
+      usedRec = true;
+    }
+
     const weightKg = isBW
       ? (bwStr !== '' && bwStr != null ? toKg(parseFloat(bwStr)) : 0)
       : (cur.weight !== '' ? toKg(parseFloat(cur.weight)) : (set?.weight ?? 0));
-    // Optimistic flip. The server re-derives next-session targets the moment
-    // this lands — no check-in step.
-    patchStatus(exId, setNum, { status: 'logged' });
+    // Optimistic flip. When reps fell back to the recommendation, write it into
+    // the input so the logged set shows what was recorded. The server re-derives
+    // next-session targets the moment this lands — no check-in step.
+    patchStatus(exId, setNum, usedRec ? { status: 'logged', reps: String(repsDone) } : { status: 'logged' });
     try {
       await api.logSet(session.id, { exercise_id: exId, set_num: setNum, reps_done: repsDone, skipped: 0, weight_used: weightKg });
     } catch {

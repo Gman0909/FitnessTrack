@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.5] - 2026-07-09
+
+### Changed
+- **Logging a set with the reps field blank now records the recommended reps.** Tapping the ✓ without typing a rep count logs the recommendation shown in the placeholder (the weight-adjusted target) and fills it into the field, so you can log a set that went to plan with a single tap. The ✓ now activates only when *both* weight and reps hold a usable value — typed or available as a recommendation — so it stays disabled for a set with no target weight, or an out-of-band weight whose rep target shows "?".
+
+---
+
 ## [1.7.4] - 2026-07-08
 
 ### Changed
