@@ -337,7 +337,7 @@ This prints a temporary `https://xxxx.trycloudflare.com` URL you can open on any
 
 ## HTTPS (self-hosted, LAN or public)
 
-FitnessTrack runs plain HTTP by default. If you need HTTPS — for example, to allow browsers to use the camera or vibration API, or to access the app from outside your network securely — you have two options:
+FitnessTrack runs plain HTTP by default. HTTPS is needed to install it to your home screen and open it with no connection (see [Why HTTPS matters for the app](#why-https-matters-for-the-app)), and to reach it securely from outside your network. If you already use Tailscale, [Option C](#option-c--tailscale-serve-no-domain-tailnet-only) is the quickest; otherwise:
 
 ### Option A — Caddy (simplest, auto-HTTPS)
 
@@ -395,13 +395,23 @@ sudo certbot --nginx -d your-domain.com
 
 Certbot modifies the nginx config to add HTTPS and sets up automatic renewal.
 
+### Option C — Tailscale serve (no domain, tailnet only)
+
+If the server and your phone are both on your [Tailscale](https://tailscale.com/) network, Tailscale can put a real Let's Encrypt certificate in front of the app with one command on the server:
+
+```bash
+sudo tailscale serve --bg http://localhost:3001
+```
+
+The app is then at `https://<machine-name>.<tailnet>.ts.net`, reachable only from your own devices (`tailscale serve status` shows the exact URL). If port 443 is already taken by another service, pick another HTTPS port with `--https=<port>`, e.g. `--https=8443`. **Don't use `--https=3001`**: FitnessTrack listens on port 3001 on every interface, including Tailscale's, so the two collide. Remove the entry with `sudo tailscale serve --https=<port> off`.
+
 ### Why HTTPS matters for the app
 
-Browsers only allow the offline app shell (service worker) and "install to home screen" on HTTPS. Over plain `http://<LAN-IP>:3001` the app works exactly as before and sets you log offline are still kept and synced — but the app can't be *opened* without a connection. If you use Tailscale, `tailscale serve --bg 3001` gives the Pi an HTTPS address on your tailnet with no other setup.
+Browsers only allow the offline app shell (service worker) and "install to home screen" on HTTPS (or `localhost`). Over plain `http://<LAN-IP>:3001` the app works exactly as before and sets you log offline are still kept and synced — but the app can't be *opened* without a connection. To install it on a phone, open the HTTPS address and use **Share → Add to Home Screen** (Safari) or **Install app** (Chrome). Note that the HTTPS address is a different site to the browser, so you sign in once more there.
 
 ### LAN-only HTTPS (no domain required)
 
-For LAN access only, use a self-signed certificate or [mkcert](https://github.com/FiloSottile/mkcert). Note that browsers will show a warning for self-signed certs unless you import the CA into your devices.
+For LAN access only, use a self-signed certificate or [mkcert](https://github.com/FiloSottile/mkcert). Browsers show a warning for self-signed certs unless you import the CA into your devices — and until the certificate is trusted, they also refuse the service worker, so offline start and install won't work. mkcert with its CA installed on the phone avoids both.
 
 ---
 
