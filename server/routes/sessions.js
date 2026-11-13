@@ -4,16 +4,12 @@ import { nextExerciseTargets, weightAdjustedTarget, setPerformance } from '../..
 import { liftVerdict, summarizeVerdicts, capVerdictToTargets, floorVerdictToTargets } from '../../shared/recap.js';
 import { slotDone } from '../../shared/slotDone.js';
 import { effectiveSetCount, recordSetCount, clearSetCountAt } from '../setCounts.js';
+import { utcToday, addDays } from '../localDate.js';
+import { check, isInt, isNum, LIMITS } from '../validate.js';
 
 const router = Router();
 
-const todayStr = () => new Date().toISOString().split('T')[0];
-
-const addDay = dateStr => {
-  const d = new Date(dateStr + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().split('T')[0];
-};
+const addDay = dateStr => addDays(dateStr, 1);
 
 // ── History-derived progression signals ──────────────────────────────────────
 
@@ -60,14 +56,19 @@ const priorSessionsForTempo = db.prepare(`
 // Objective progression tempo from the two most recent completed sessions of
 // this exercise before the current one: two straight beats → fast, two straight
 // shortfalls → slow, else normal. Bodyweight has no volume axis → always normal.
-function exerciseTempo(planId, exerciseId, userId, sessId, sessDate, repsOnly) {
-  if (repsOnly) return 'normal';
+// `known` is false when there isn't enough history to judge (the tempo then
+// defaults to normal) — the deload check only counts lifts it can judge.
+export function exerciseTempoInfo(planId, exerciseId, userId, sessId, sessDate, repsOnly) {
+  if (repsOnly) return { tempo: 'normal', known: false };
   const prior = priorSessionsForTempo.all({ ex: exerciseId, plan: planId, user: userId, date: sessDate, id: sessId });
   const ratios = prior.map(p => sessionVolumeRatio(p.id, p.date, planId, exerciseId)).filter(r => r != null);
-  if (ratios.length < 2) return 'normal';
-  if (ratios.every(r => r > 1.02)) return 'fast';
-  if (ratios.every(r => r < 0.98)) return 'slow';
-  return 'normal';
+  if (ratios.length < 2) return { tempo: 'normal', known: false };
+  if (ratios.every(r => r > 1.02)) return { tempo: 'fast', known: true };
+  if (ratios.every(r => r < 0.98)) return { tempo: 'slow', known: true };
+  return { tempo: 'normal', known: true };
+}
+function exerciseTempo(planId, exerciseId, userId, sessId, sessDate, repsOnly) {
+  return exerciseTempoInfo(planId, exerciseId, userId, sessId, sessDate, repsOnly).tempo;
 }
 
 // ── Double-progression recompute ──────────────────────────────────────────────
@@ -77,7 +78,7 @@ function exerciseTempo(planId, exerciseId, userId, sessId, sessDate, repsOnly) {
 //     next-session per-set targets at valid_from = session.date + 1.
 //   - Not complete → remove any targets a prior completion produced.
 // Pure performance-based: no check-ins, no subjective modifiers.
-export function recomputeExercise(session, exerciseId) {
+export function recomputeExercise(session, exerciseId, today = utcToday()) {
   const planId = session.plan_id ?? null;
   const sched = db.prepare(`
     SELECT s.set_count, e.equipment,
@@ -98,7 +99,7 @@ export function recomputeExercise(session, exerciseId) {
   const repsOnly = sched.equipment === 'bodyweight' || (sched.pause_weight === 1 && sched.pause_cap_kg == null);
   const weightCap = capped ? sched.pause_cap_kg : null;
 
-  const sessionDateStr = session.date ?? todayStr();
+  const sessionDateStr = session.date ?? today;
   const nextDayStr = addDay(sessionDateStr);
   const tempo = exerciseTempo(planId, exerciseId, session.user_id, session.id, sessionDateStr, repsOnly);
   const setCount = effectiveSetCount(planId, session.session_dow, exerciseId, sessionDateStr, sched.set_count);
@@ -181,9 +182,9 @@ export function recomputeExercise(session, exerciseId) {
 }
 
 // Mark the session complete when the whole day's schedule is logged/skipped.
-function updateCompletion(session) {
+function updateCompletion(session, today = utcToday()) {
   const planId   = session.plan_id ?? null;
-  const sessDate = session.date ?? todayStr();
+  const sessDate = session.date ?? today;
 
   // Expected sets = the count effective for this session's date, per exercise.
   // A set the algorithm appended for a later session has a future valid_from
@@ -229,12 +230,7 @@ router.get('/slot', (req, res) => {
     return res.status(400).json({ error: 'Day not in plan' });
 
   const getSlotSession = db.prepare(`
-    SELECT s.*,
-      (SELECT COALESCE(SUM(sc.set_count), 0) FROM schedule sc
-       WHERE sc.plan_id = s.plan_id AND sc.day_of_week = s.session_dow) as expected_sets,
-      (SELECT COUNT(*) FROM logged_sets ls
-       WHERE ls.session_id = s.id AND (ls.skipped = 1 OR ls.reps_done IS NOT NULL)) as done_sets
-    FROM sessions s
+    SELECT s.* FROM sessions s
     WHERE s.plan_id = ? AND s.week_num = ? AND s.session_dow = ? AND s.user_id = ?
   `);
 
@@ -274,7 +270,7 @@ router.get('/slot', (req, res) => {
 router.post('/:id/unlock', (req, res) => {
   const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
-  const sessDate    = session.date ?? todayStr();
+  const sessDate    = session.date ?? req.today;
   const schedRows   = db.prepare('SELECT exercise_id, set_count FROM schedule WHERE plan_id IS ? AND day_of_week = ?')
     .all(session.plan_id ?? null, session.session_dow);
   let expectedSets = 0;
@@ -286,15 +282,16 @@ router.post('/:id/unlock', (req, res) => {
 
   db.transaction(() => {
     if (session.date) {
-      const nextDay = new Date(session.date + 'T00:00:00Z');
-      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-      const nextDayStr = nextDay.toISOString().split('T')[0];
-      db.prepare('DELETE FROM set_targets WHERE valid_from = ? AND plan_id IS ?')
-        .run(nextDayStr, session.plan_id ?? null);
-      // Also drop any set the session appended for the next one.
+      const nextDayStr = addDay(session.date);
+      // Only this day's exercises: another session completed on the same date
+      // (a catch-up day) wrote its own next-day targets, which must survive.
+      const delTargets = db.prepare('DELETE FROM set_targets WHERE valid_from = ? AND plan_id IS ? AND exercise_id = ?');
       for (const r of db.prepare('SELECT exercise_id FROM schedule WHERE plan_id IS ? AND day_of_week = ?')
-        .all(session.plan_id ?? null, session.session_dow))
+        .all(session.plan_id ?? null, session.session_dow)) {
+        delTargets.run(nextDayStr, session.plan_id ?? null, r.exercise_id);
+        // Also drop any set the session appended for the next one.
         clearSetCountAt(session.plan_id ?? null, session.session_dow, r.exercise_id, nextDayStr);
+      }
     }
     db.prepare('UPDATE sessions SET checked_in = 0, unlocked = 1 WHERE id = ?').run(session.id);
   })();
@@ -333,7 +330,7 @@ router.post('/:id/skip', (req, res) => {
     // Stamp today's date if the session is blank (first activity = the skip
     // itself). Don't overwrite an existing date — if the user already logged
     // something earlier in the session, that earlier date stands.
-    db.prepare(`UPDATE sessions SET date = date('now') WHERE id = ? AND date IS NULL`).run(sessionId);
+    db.prepare(`UPDATE sessions SET date = ? WHERE id = ? AND date IS NULL`).run(req.today, sessionId);
     db.prepare('UPDATE sessions SET checked_in = 1, unlocked = 0 WHERE id = ?').run(sessionId);
   })();
 
@@ -351,6 +348,18 @@ router.post('/:id/sets', (req, res) => {
   if (!session) return res.status(404).json({ error: 'Not found' });
 
   const { exercise_id, set_num, reps_done, skipped = 0, weight_used } = req.body;
+  const err = check(req.body, {
+    exercise_id: v => isInt(v, 1, Number.MAX_SAFE_INTEGER),
+    set_num:     v => isInt(v, ...LIMITS.setNum),
+    reps_done:   v => v === null || isInt(v, ...LIMITS.reps),
+    weight_used: v => v === null || isNum(v, ...LIMITS.weightKg),
+    skipped:     v => v === 0 || v === 1 || typeof v === 'boolean',
+  }, ['exercise_id', 'set_num']);
+  if (err) return res.status(400).json({ error: err });
+  // Only exercises on this session's day can be logged.
+  if (!db.prepare('SELECT 1 FROM schedule WHERE plan_id IS ? AND day_of_week = ? AND exercise_id = ?')
+        .get(session.plan_id ?? null, session.session_dow, exercise_id))
+    return res.status(400).json({ error: 'Exercise is not scheduled for this session' });
 
   const rowId = db.transaction(() => {
     const existing = db.prepare(
@@ -371,15 +380,15 @@ router.post('/:id/sets', (req, res) => {
     // Stamp the session date on the first live log (blank, never-finalized
     // sessions only); the DELETE handler clears it back to NULL if emptied.
     if (session.date == null) {
-      db.prepare(`UPDATE sessions SET date = date('now')
-        WHERE id = ? AND date IS NULL AND checked_in = 0 AND unlocked = 0`).run(session.id);
+      db.prepare(`UPDATE sessions SET date = ?
+        WHERE id = ? AND date IS NULL AND checked_in = 0 AND unlocked = 0`).run(req.today, session.id);
       session.date = db.prepare('SELECT date FROM sessions WHERE id = ?').get(session.id).date;
     }
 
     // Re-derive the exercise's next-session targets and the session's
     // completion flag from the new performance data.
-    recomputeExercise(session, exercise_id);
-    updateCompletion(session);
+    recomputeExercise(session, exercise_id, req.today);
+    updateCompletion(session, req.today);
     return id;
   })();
 
@@ -405,8 +414,8 @@ router.delete('/:id/sets/:exerciseId/:setNum', (req, res) => {
       session.date = r.date;
     }
 
-    recomputeExercise(session, exerciseId);
-    updateCompletion(session);
+    recomputeExercise(session, exerciseId, req.today);
+    updateCompletion(session, req.today);
   })();
 
   res.json({ ok: true });
@@ -419,6 +428,9 @@ router.get('/history', (req, res) => {
       SELECT s.date,
              SUM(ls.weight_used * ls.reps_done) as volume,
              MAX(ls.weight_used)                as max_weight,
+             -- Estimated 1RM (Epley) — mirrors shared/e1rm.js.
+             ROUND(MAX(CASE WHEN ls.reps_done = 1 THEN ls.weight_used
+                            WHEN ls.reps_done > 1 THEN ls.weight_used * (1 + ls.reps_done / 30.0) END), 1) as e1rm,
              COUNT(*)                           as sets_logged
       FROM logged_sets ls
       JOIN sessions s ON s.id = ls.session_id
@@ -431,7 +443,7 @@ router.get('/history', (req, res) => {
   }
 
   const rows = db.prepare(`
-    SELECT e.id as exercise_id, e.name, e.muscle_group
+    SELECT e.id as exercise_id, e.name, e.muscle_group, e.equipment
     FROM exercises e
     WHERE e.id IN (
       SELECT DISTINCT ls.exercise_id FROM logged_sets ls
@@ -548,7 +560,7 @@ router.get('/:id/recap', (req, res) => {
       const { allMissed, allMet } = targetOutcome(sc.exercise_id, sc.rep_min, sc.rep_max);
       verdict = floorVerdictToTargets(capVerdictToTargets(rawVerdict, allMissed), allMet);
     }
-    const tempo = exerciseTempo(planId, sc.exercise_id, userId, session.id, session.date ?? todayStr(), repsOnly);
+    const tempo = exerciseTempo(planId, sc.exercise_id, userId, session.id, session.date ?? req.today, repsOnly);
 
     let pr = null;
     if (repsOnly) {

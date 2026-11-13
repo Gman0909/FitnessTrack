@@ -9,7 +9,7 @@ import { SetupPage }  from './pages/stubs.jsx';
 import { StatsPage }  from './pages/StatsPage.jsx';
 import { UnitContext, useUnitProvider } from './units.js';
 import { AuthProvider, useAuth } from './auth.jsx';
-import { api } from './api/index.js';
+import { api, outbox } from './api/index.js';
 import { BarbellLogo } from './ui.jsx';
 
 // ── Nav link style ────────────────────────────────────────────────────────────
@@ -26,6 +26,31 @@ const linkStyle = ({ isActive }) => ({
   whiteSpace: 'nowrap',
   fontSize: '0.95rem',
 });
+
+// ── Sync status ───────────────────────────────────────────────────────────────
+// Shows only while logged sets are waiting to reach the server.
+
+function SyncStatus() {
+  const [q, setQ] = useState(outbox.state());
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => outbox.subscribe(setQ), []);
+  useEffect(() => {
+    const up = () => setOnline(true), down = () => setOnline(false);
+    window.addEventListener('online', up); window.addEventListener('offline', down);
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+  }, []);
+  if (!q.pending) return null;
+  const n = q.pending === 1 ? '1 set' : `${q.pending} sets`;
+  const offline = !online || q.waiting;
+  const color = offline ? 'var(--mc-shoulders)' : 'var(--muted)';
+  return (
+    <span role="status" title={offline ? 'Saved on this device — will sync when the connection is back' : 'Saving to the server'}
+      style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color }}>
+      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+      {offline ? `${n} waiting to sync` : `Saving ${n}…`}
+    </span>
+  );
+}
 
 // ── App shell ─────────────────────────────────────────────────────────────────
 
@@ -53,6 +78,8 @@ function AppShell() {
 
   async function handleLogout() {
     await api.logout();
+    // Drop cached API responses so the next account on this device can't see them offline.
+    try { await caches?.delete('ft-api'); } catch { /* no Cache API */ }
     setUser(null);
   }
 
@@ -71,6 +98,7 @@ function AppShell() {
       <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
         <BarbellLogo size={22} />
         <span style={{ fontWeight: '800', fontSize: '1rem', color: 'var(--text)', letterSpacing: '-0.01em' }}>FitnessTrack</span>
+        <SyncStatus />
       </div>
 
       {/* Nav bar */}

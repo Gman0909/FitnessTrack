@@ -1,904 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api/index.js';
+import { api, outbox, localDateStr } from '../api/index.js';
 import { useUnit } from '../units.js';
-import { computeProgressionHint } from '../progressionHint.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
 import { WorkoutRecap } from '../components/WorkoutRecap.jsx';
 import { weightAdjustedTarget } from '../../../shared/algorithm.js';
-
-const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function fmtShort(dateStr) {
-  const [, m, d] = dateStr.split('-').map(Number);
-  return `${MONTH_SHORT[m - 1]} ${d}`;
-}
-
-const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const DAY_SHORT  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const MC_COLORS = {
-  chest: '#f07098', back: '#3cc9b0', shoulders: '#f0a030',
-  biceps: '#3cc9b0', triceps: '#f07098', legs: '#b088e8', core: '#4caf50',
-};
-function mcColor(mg) { return MC_COLORS[mg] ?? '#777'; }
-
-function fmtDate(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
-    .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-}
-
-// ── Muscle group badge ─────────────────────────────────────────────────────────
-
-function MuscleGroupBadge({ muscleGroup }) {
-  const color = mcColor(muscleGroup);
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: `${color}0f`, border: `1px solid ${color}66`, borderRadius: '6px', padding: '4px 10px 4px 8px' }}>
-      <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-        {[10, 14, 10].map((h, i) => <div key={i} style={{ width: '3px', height: `${h}px`, background: color, borderRadius: '2px' }} />)}
-      </div>
-      <span style={{ fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color }}>{muscleGroup}</span>
-    </div>
-  );
-}
-
-// ── Week shrink warning modal ─────────────────────────────────────────────────
-
-function WeekShrinkWarningModal({ weekNum, onConfirm, onCancel }) {
-  const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' };
-  const box     = { background: 'var(--surface2)', borderRadius: '12px', padding: '1.5rem', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)' };
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div style={box}>
-        <h3 style={{ margin: 0, color: 'var(--text)' }}>Shorten plan?</h3>
-        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem' }}>
-          Week {weekNum} has logged workouts. Shortening the plan will hide them from view (data is kept).
-        </p>
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-          <button onClick={onCancel}
-            style={{ padding: '0.5rem 1rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'none', color: 'var(--muted)' }}>
-            Cancel
-          </button>
-          <button onClick={onConfirm}
-            style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: '6px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '600' }}>
-            Shorten
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── End-of-plan modal ─────────────────────────────────────────────────────────
-
-function EndOfPlanModal({ plan, calendarData, onClone, onClose }) {
-  const [step, setStep]         = useState('prompt');
-  const [seedWeek, setSeedWeek] = useState(null);
-  const [cloning, setCloning]   = useState(false);
-
-  const completedWeeks = calendarData?.weeks?.filter(w =>
-    w.days.some(d => (d.session?.exercise_count ?? 0) > 0)
-  ) ?? [];
-
-  async function handleClone() {
-    setCloning(true);
-    await onClone(seedWeek != null ? { seed_week: seedWeek } : {});
-  }
-
-  const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' };
-  const box     = { background: 'var(--surface2)', borderRadius: '14px', padding: '1.5rem', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)' };
-  const optBtn  = active => ({ width: '100%', padding: '0.55rem 0.85rem', textAlign: 'left', border: `1px solid ${active ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px', background: active ? 'var(--btn)' : 'var(--surface)', color: active ? 'var(--btn-text)' : 'var(--muted)', fontSize: '0.875rem', fontWeight: active ? '600' : 'normal', cursor: 'pointer' });
-
-  if (step === 'prompt') return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={box}>
-        <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.1rem' }}>Plan complete!</h3>
-        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-          You've finished <strong style={{ color: 'var(--text)' }}>{plan.name}</strong>. Consider taking a week off to rest and recover before starting your next cycle.
-        </p>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={onClose}
-            style={{ flex: 1, padding: '0.6rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--muted)', fontWeight: '500' }}>
-            Not now
-          </button>
-          <button onClick={() => setStep('seed')}
-            style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '600' }}>
-            Start new cycle →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={box}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button onClick={() => setStep('prompt')}
-            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, fontSize: '1rem', lineHeight: 1 }}>←</button>
-          <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1rem', fontWeight: '700' }}>Pick up weights from</h3>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <button onClick={() => setSeedWeek(null)} style={optBtn(seedWeek === null)}>Original starting weights</button>
-          {completedWeeks.map(w => (
-            <button key={w.week_num} onClick={() => setSeedWeek(w.week_num)} style={optBtn(seedWeek === w.week_num)}>
-              Week {w.week_num}
-              {w.start_date && w.end_date && <span style={{ opacity: 0.65, fontWeight: 'normal' }}> · {fmtShort(w.start_date)} – {fmtShort(w.end_date)}</span>}
-            </button>
-          ))}
-          {completedWeeks.length === 0 && (
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--dim)' }}>No completed weeks to seed from.</p>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={onClose} disabled={cloning}
-            style={{ flex: 1, padding: '0.6rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--muted)', fontWeight: '500' }}>
-            Cancel
-          </button>
-          <button onClick={handleClone} disabled={cloning}
-            style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '600' }}>
-            {cloning ? 'Cloning…' : 'Clone & edit'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Day picker panel ──────────────────────────────────────────────────────────
-
-function DayPickerPanel({ calendarData, selectedSlot, onSelect, weekCount, onDecreaseWeek, onIncreaseWeek }) {
-  if (!calendarData?.weeks?.length) return (
-    <div style={{ padding: '0.75rem 0', marginBottom: '1rem', color: 'var(--muted)', fontSize: '0.875rem' }}>
-      No active plan. Set one up in the Schedule tab.
-    </div>
-  );
-
-  const workoutDays = [...new Set(calendarData.weeks.flatMap(w => w.days).map(d => d.day_of_week))].sort((a, b) => a - b);
-  const weeks       = calendarData.weeks;
-  const lookup      = {};
-  for (const week of weeks) {
-    lookup[week.week_num] = {};
-    for (const day of week.days) lookup[week.week_num][day.day_of_week] = day;
-  }
-
-  const COL = 64, ROW_LABEL = 44;
-
-  return (
-    <div style={{ overflowX: 'auto', marginBottom: '1.25rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem 0.75rem 0.5rem' }}>
-
-      {/* Week count controls */}
-      {weekCount != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', paddingBottom: '0.6rem', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--muted)', flex: 1 }}>Plan length</span>
-          <button type="button" onClick={onDecreaseWeek} aria-label="Decrease weeks"
-            style={{ width: '36px', height: '36px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-          <span style={{ minWidth: '60px', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text)' }}>{weekCount} week{weekCount !== 1 ? 's' : ''}</span>
-          <button type="button" onClick={onIncreaseWeek} aria-label="Increase weeks"
-            style={{ width: '36px', height: '36px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-        </div>
-      )}
-
-      <div style={{ minWidth: ROW_LABEL + weeks.length * (COL + 6) }}>
-
-        {/* Week column headers */}
-        <div style={{ display: 'flex', marginBottom: '5px' }}>
-          <div style={{ width: ROW_LABEL, flexShrink: 0 }} />
-          {weeks.map(w => (
-            <div key={w.week_num} style={{ width: COL, flexShrink: 0, marginLeft: '6px', textAlign: 'center', fontSize: '0.68rem', fontWeight: '700', letterSpacing: '0.07em', color: 'var(--dim)', textTransform: 'uppercase' }}>
-              Wk {w.week_num}
-            </div>
-          ))}
-        </div>
-
-        {/* Day rows */}
-        {workoutDays.map(dow => (
-          <div key={dow} style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
-            <div style={{ width: ROW_LABEL, flexShrink: 0, fontSize: '0.78rem', fontWeight: '500', color: 'var(--muted)' }}>
-              {DAY_SHORT[dow]}
-            </div>
-            {weeks.map(week => {
-              const day = lookup[week.week_num]?.[dow];
-              if (!day) return <div key={week.week_num} style={{ width: COL, height: 40, flexShrink: 0, marginLeft: '6px' }} />;
-
-              const loggedCount   = day.session?.logged_count ?? 0;
-              const exerciseCount = day.session?.exercise_count ?? 0;
-              const scheduled     = day.scheduled_count ?? 0;
-              const completed     = loggedCount > 0 && loggedCount === scheduled;
-              const allSkipped    = !completed && exerciseCount > 0 && loggedCount === 0 && exerciseCount === scheduled;
-              const partial       = !completed && !allSkipped && exerciseCount > 0;
-              const isSelected = selectedSlot?.weekNum === week.week_num && selectedSlot?.dow === dow;
-              const isLocked   = day.is_locked;
-              const isCurrent  = day.is_current;
-
-              let bg = 'var(--surface2)', borderStyle = '1px solid var(--border)', textColor = 'var(--muted)';
-              let opacity = 1, fontWeight = 'normal';
-
-              if (completed)  { bg = '#1a2e1a'; borderStyle = '1px solid #2d5a2d'; textColor = '#4caf50'; }
-              if (partial)    { bg = '#2a1c00'; borderStyle = '1px solid #5a3c00'; textColor = '#f0a030'; }
-              if (allSkipped) { bg = '#2a0a0a'; borderStyle = '1px solid #5a1a1a'; textColor = 'var(--danger)'; }
-              if (isCurrent && !isSelected) { borderStyle = '1px solid #555'; textColor = 'var(--text)'; }
-              if (isSelected) { bg = completed ? '#1e3b1e' : allSkipped ? '#3a0a0a' : partial ? '#3a2800' : 'var(--surface3)'; borderStyle = '2px solid var(--text)'; textColor = 'var(--text)'; fontWeight = '700'; }
-              if (isLocked && !isSelected) { borderStyle = '1px dashed var(--border)'; opacity = 0.55; }
-
-              const label = completed ? '✓✓' : allSkipped ? '✗' : partial ? '✓' : isCurrent && !isSelected ? '▶' : DAY_SHORT[dow];
-
-              return (
-                <div key={week.week_num}
-                  onClick={() => onSelect({ weekNum: week.week_num, dow })}
-                  style={{ width: COL, height: 40, flexShrink: 0, marginLeft: '6px', borderRadius: '7px', background: bg, border: borderStyle, opacity, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px', transition: 'background 0.1s' }}
-                >
-                  <span style={{ fontSize: '0.75rem', fontWeight, color: textColor }}>{label}</span>
-                  <span style={{ fontSize: '0.58rem', color: textColor, opacity: 0.65 }}>{day.date ? day.date.slice(5) : ''}</span>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Skip session confirm modal ────────────────────────────────────────────────
-
-function SkipSessionModal({ onConfirm, onCancel }) {
-  const [value, setValue] = useState('');
-  const [busy, setBusy]   = useState(false);
-  const confirmed = value.trim().toLowerCase() === 'skip';
-
-  async function handleConfirm() {
-    if (!confirmed) return;
-    setBusy(true);
-    await onConfirm();
-  }
-
-  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
-  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'400px', display:'flex', flexDirection:'column', gap:'1.25rem', border:'1px solid var(--border)' };
-
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div style={box}>
-        <div>
-          <h3 style={{ margin:'0 0 0.5rem', color:'var(--text)', fontSize:'1.1rem', fontWeight:'700' }}>Skip entire session?</h3>
-          <p style={{ margin:0, color:'var(--muted)', fontSize:'0.875rem', lineHeight:1.5 }}>
-            All sets will be marked as skipped and the session will be closed. This cannot be undone.
-          </p>
-        </div>
-        <div>
-          <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--dim)', marginBottom:'0.4rem' }}>
-            Type <strong style={{ color:'var(--text)' }}>skip</strong> to confirm
-          </label>
-          <input
-            autoFocus
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && confirmed && handleConfirm()}
-            placeholder="skip"
-            style={{ width:'100%', padding:'0.55rem 0.75rem', border:`1px solid ${confirmed ? 'var(--danger)' : 'var(--border)'}`, borderRadius:'8px', background:'var(--input-bg)', color:'var(--text)', fontSize:'1rem', boxSizing:'border-box', outline:'none' }}
-          />
-        </div>
-        <div style={{ display:'flex', gap:'0.5rem' }}>
-          <button type="button" onClick={onCancel} disabled={busy}
-            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
-            Cancel
-          </button>
-          <button type="button" onClick={handleConfirm} disabled={!confirmed || busy}
-            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background: confirmed ? 'var(--danger)' : 'var(--surface2)', color: confirmed ? '#fff' : 'var(--dim)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor: confirmed && !busy ? 'pointer' : 'default', transition:'background 0.15s, color 0.15s' }}>
-            {busy ? 'Skipping…' : 'Skip session'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Finish confirm modal ───────────────────────────────────────────────────────
-
-function FinishConfirmModal({ toLog, toSkip, onConfirm, onCancel }) {
-  const { display } = useUnit();
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handleConfirm() {
-    setConfirming(true);
-    setError(null);
-    try {
-      await onConfirm();
-    } catch {
-      setConfirming(false);
-      setError('Could not save. Check your connection and try again.');
-    }
-  }
-
-  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
-  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'500px', maxHeight:'80vh', overflowY:'auto', display:'flex', flexDirection:'column', gap:'1.25rem', border:'1px solid var(--border)' };
-  const sectionLabel = { margin:'0 0 0.5rem', fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:'700' };
-
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div style={box}>
-        <h3 style={{ margin:0, color:'var(--text)', fontSize:'1.1rem', fontWeight:'700' }}>Finish Workout</h3>
-
-        {toLog.length > 0 && (
-          <div>
-            <p style={{ ...sectionLabel, color:'var(--success)' }}>Logging ({toLog.length} set{toLog.length !== 1 ? 's' : ''})</p>
-            {toLog.map((item, i) => (
-              <div key={i} style={{ fontSize:'0.875rem', color:'var(--text)', padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
-                {item.exerciseName} · Set {item.setNum}: <span style={{ color:'var(--muted)' }}>{display(item.weightKg)} × {item.reps}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {toSkip.length > 0 && (
-          <div>
-            <p style={{ ...sectionLabel, color:'var(--dim)' }}>Skipping ({toSkip.length} set{toSkip.length !== 1 ? 's' : ''})</p>
-            {toSkip.map((item, i) => (
-              <div key={i} style={{ fontSize:'0.875rem', color:'var(--muted)', padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
-                {item.exerciseName} · Set {item.setNum}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <p style={{ margin:0, color:'var(--danger)', fontSize:'0.85rem', textAlign:'center' }}>{error}</p>
-        )}
-        <div style={{ display:'flex', gap:'0.5rem', marginTop:'0.25rem' }}>
-          <button type="button" onClick={onCancel} disabled={confirming}
-            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
-            Cancel
-          </button>
-          <button type="button" onClick={handleConfirm} disabled={confirming}
-            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor: confirming ? 'default' : 'pointer' }}>
-            {confirming ? 'Logging…' : error ? 'Retry' : 'Confirm'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Resume-weight confirm modal ───────────────────────────────────────────────
-
-function ResumeWeightModal({ exerciseName, onConfirm, onCancel }) {
-  const [busy, setBusy]   = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handle() {
-    setBusy(true);
-    setError(null);
-    try { await onConfirm(); }
-    catch { setBusy(false); setError('Could not save. Check your connection and try again.'); }
-  }
-
-  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
-  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'400px', display:'flex', flexDirection:'column', gap:'1rem', border:'1px solid var(--border)' };
-
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div style={box}>
-        <h3 style={{ margin:0, color:'var(--text)', fontSize:'1.1rem', fontWeight:'700' }}>Resume weight progression?</h3>
-        <p style={{ margin:0, color:'var(--muted)', fontSize:'0.875rem', lineHeight:1.5 }}>
-          <strong style={{ color:'var(--text)' }}>{exerciseName}</strong> will start adding
-          weight again once you hit the top of its rep range — from your next session onward.
-        </p>
-        {error && <p style={{ margin:0, color:'var(--danger)', fontSize:'0.85rem' }}>{error}</p>}
-        <div style={{ display:'flex', gap:'0.5rem' }}>
-          <button type="button" onClick={onCancel} disabled={busy}
-            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--surface)', color:'var(--text)', border:'1px solid var(--border)', borderRadius:'8px', fontWeight:'600', fontSize:'0.95rem', cursor:'pointer' }}>
-            Cancel
-          </button>
-          <button type="button" onClick={handle} disabled={busy}
-            style={{ flex:1, padding:'0.85rem', minHeight:'48px', background:'var(--btn)', color:'var(--btn-text)', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'0.95rem', cursor:'pointer' }}>
-            {busy ? 'Saving…' : error ? 'Retry' : 'Resume'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Set row ────────────────────────────────────────────────────────────────────
-
-// Controlled component — status / weight / reps are owned by the parent
-// (TodayPage's setStatuses Map). All actions go through callbacks; no local
-// state, no refs, no liveValues. This eliminates stale-state-after-reload bugs.
-function SetRow({
-  set, isBodyweight, bodyweightStr, isReadOnly,
-  status, weight, reps, repMin, repMax,
-  onWeightChange, onRepsChange, onClickTick, onClickUndo,
-}) {
-  const { unit, toKg } = useUnit();
-  // Weight last committed (on blur) for the deviation re-targeting below.
-  const [evalWeight, setEvalWeight] = useState(weight);
-
-  const pill = { display:'flex', alignItems:'center', justifyContent:'center', background:'var(--input-bg)', border:'1px solid var(--border)', borderRadius:'8px', height:'42px', fontSize:'1rem', fontWeight:'500' };
-
-  if (status === 'skipped') return (
-    <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
-      <div style={{ ...pill, color:'var(--dim)', gridColumn: isBodyweight ? '1/2' : '1/3', justifyContent:'flex-start', paddingLeft:'0.75rem' }}>
-        <span style={{ fontSize:'0.85rem', color:'var(--dim)' }}>Set {set.set_num} — Skipped</span>
-        {!isReadOnly && <button type="button" onClick={onClickUndo} style={{ marginLeft:'auto', marginRight:'0.5rem', background:'none', border:'none', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer', textDecoration:'underline' }}>Undo</button>}
-      </div>
-      <div style={{ width:'44px', height:'44px' }} />
-    </div>
-  );
-
-  const weightFilled = isBodyweight ? bodyweightStr !== '' : weight !== '';
-  const isLogged = status === 'logged';
-  const inputStyle = { ...pill, width:'100%', color:'var(--text)', outline:'none', textAlign:'center', padding:0,
-    borderColor: isLogged ? 'var(--success)' : 'var(--border)', opacity: isReadOnly ? 0.6 : 1 };
-
-  const handleFocusSelect = e => e.target.select();
-
-  // P7: guard against typo-driven progression. A logged weight far off the
-  // target (>25%), or an implausibly high rep count, prompts a confirm before
-  // logging — only on the log action, not when un-ticking an already-logged set.
-  const logWithGuard = () => {
-    if (!isLogged) {
-      const issues = [];
-      if (!isBodyweight && set.weight > 0) {
-        const w = toKg(parseFloat(weight));
-        if (Number.isFinite(w) && w > 0 && Math.abs(w - set.weight) / set.weight >= 0.25)
-          issues.push(`weight (${weight} ${unit})`);
-      }
-      const r = parseInt(reps, 10);
-      if (Number.isFinite(r) && r > Math.max(repMax * 2, 30)) issues.push(`${r} reps`);
-      if (issues.length && !window.confirm(`That ${issues.join(' and ')} looks unusual — possible typo. Log it anyway?`))
-        return;
-    }
-    onClickTick();
-  };
-
-  const handleKeyDown = e => {
-    if (e.key !== 'Enter' || isReadOnly || isLogged) return;
-    const repsDone = parseInt(reps, 10);
-    if (!repsDone || repsDone < 1) return;
-    const weightPresent = isBodyweight ? bodyweightStr !== '' : weight !== '';
-    if (!weightPresent) return;
-    e.preventDefault();
-    e.target.blur();
-    logWithGuard();
-  };
-
-  // Disable inputs once a set is logged — to edit, un-tick (✓) first.
-  const inputsLocked = isReadOnly || isLogged;
-  const lockedStyle  = isLogged ? { ...inputStyle, cursor: 'not-allowed' } : inputStyle;
-
-  // Weight-deviation rep target. When the loaded weight differs from the
-  // recommendation, the rep target re-derives to preserve volume (±15% band);
-  // beyond the band there is no comparable target, shown as "?". Re-evaluated
-  // when the weight cell loses focus, or from the logged weight once set is in.
-  const effWeight  = isLogged ? weight : evalWeight;
-  const adj = (!isBodyweight && set.weight != null && effWeight !== '' && effWeight != null)
-    ? weightAdjustedTarget({ weight: set.weight, reps: set.reps }, toKg(parseFloat(effWeight)), { repMin, repMax })
-    : null;
-  const outOfBand  = adj != null && !adj.inBand;
-  const targetReps = (adj && adj.inBand) ? adj.reps : Math.max(repMin, Math.min(repMax, set.reps ?? repMin));
-
-  // The tick activates only when both weight and reps hold a usable value —
-  // typed, or available as a recommendation. Weight's recommendation is the
-  // pre-filled target (weightFilled covers it); reps has a recommendation
-  // whenever the weight is in-band (out-of-band shows "?" and needs a typed
-  // value). Clicking with reps blank logs the recommendation (see handleLog).
-  const repsEntered = reps !== '' && parseInt(reps, 10) >= 1;
-  const canLog = !isReadOnly && (isLogged || (weightFilled && (repsEntered || !outOfBand)));
-
-  // Actual-vs-target glyph. Suppressed on first-time sets and out-of-band
-  // weight deviations. Within the ±15% weight band, volume (kg × reps) drives
-  // the comparison so that logging a heavier weight for the same reps correctly
-  // shows ▲ rather than =.
-  const loggedReps = parseInt(reps, 10);
-  let perf = null;
-  if (isLogged && !outOfBand && Number.isFinite(loggedReps) && targetReps != null && set.prev_reps != null) {
-    if (adj && adj.inBand && set.weight != null && set.weight > 0) {
-      const wKg = toKg(parseFloat(effWeight));
-      const actualVol = wKg * loggedReps;
-      const targetVol = set.weight * set.reps;
-      // Tolerate the whole-rep rounding of the displayed (weight-adjusted) target:
-      // within half a rep of the target volume counts as "met", so hitting the
-      // shown rep target after a small weight deviation isn't mis-flagged ▲/▼.
-      const tol = wKg * 0.5;
-      perf = actualVol > targetVol + tol ? 'up' : actualVol < targetVol - tol ? 'down' : 'met';
-    } else {
-      perf = loggedReps > targetReps ? 'up' : loggedReps === targetReps ? 'met' : 'down';
-    }
-  }
-  const perfGlyph = { up: '▲', met: '=', down: '▼' };
-  const perfColor = { up: 'var(--success)', met: 'var(--dim)', down: 'var(--danger)' };
-
-  return (
-    <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
-      {!isBodyweight && (
-        <input type="number" value={weight} onChange={e => onWeightChange(e.target.value)}
-          onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
-          onBlur={() => setEvalWeight(weight)}
-          placeholder={unit} step={unit === 'lbs' ? '1' : '0.5'}
-          disabled={inputsLocked}
-          style={lockedStyle}
-        />
-      )}
-      <div style={{ position:'relative' }}>
-        <input type="number" value={reps} onChange={e => onRepsChange(e.target.value)}
-          onFocus={handleFocusSelect} onKeyDown={handleKeyDown}
-          placeholder={outOfBand ? '?' : (targetReps != null ? String(targetReps) : 'reps')} min="1" max="999"
-          disabled={inputsLocked}
-          style={{ ...lockedStyle, width:'100%' }}
-        />
-        {perf && (
-          <span title={`Target ${targetReps}`}
-            style={{ position:'absolute', right:'7px', top:'50%', transform:'translateY(-50%)',
-              fontSize:'0.8rem', fontWeight:700, color: perfColor[perf], pointerEvents:'none' }}>
-            {perfGlyph[perf]}
-          </span>
-        )}
-      </div>
-      <div onClick={canLog ? logWithGuard : undefined}
-        style={{ width:'44px', height:'44px', borderRadius:'8px', flexShrink:0,
-          cursor: isReadOnly ? 'default' : canLog ? 'pointer' : 'default',
-          border:`2px solid ${isLogged ? 'var(--success)' : canLog ? 'var(--muted)' : 'var(--border)'}`,
-          background: isLogged ? '#1a2e1a' : 'transparent', opacity: isReadOnly && !isLogged ? 0.4 : 1,
-          display:'flex', alignItems:'center', justifyContent:'center', transition:'border-color 0.15s, background 0.15s' }}>
-        {isLogged && <span style={{ color:'var(--success)', fontSize:'1.3rem', lineHeight:1 }}>✓</span>}
-      </div>
-    </div>
-  );
-}
-
-// ── History icon ──────────────────────────────────────────────────────────────
-
-function HistoryIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 8A5 5 0 1 1 8 3" />
-      <polyline points="5.5,1.5 8,3 5.5,4.5" />
-      <line x1="8" y1="8" x2="8" y2="5.8" />
-      <line x1="8" y1="8" x2="10.2" y2="8" />
-    </svg>
-  );
-}
-
-// ── History chart ──────────────────────────────────────────────────────────────
-
-function HistoryChart({ data, metric }) {
-  const { unit } = useUnit();
-  const toDisp = kg => unit === 'lbs' ? Math.round(kg * 2.2046 * 10) / 10 : kg;
-  const valueOf = d => metric === 'volume' ? d.volume : d.max_weight;
-
-  const W = 500, H = 180;
-  const pad = { top: 14, right: 16, bottom: 34, left: 46 };
-  const cW  = W - pad.left - pad.right;
-  const cH  = H - pad.top  - pad.bottom;
-
-  const vals = data.map(d => toDisp(valueOf(d)));
-  const lo   = Math.min(...vals), hi = Math.max(...vals);
-  const span = hi - lo || 1;
-  const yLo  = lo - span * 0.18, yHi = hi + span * 0.18;
-
-  const xOf  = i => pad.left + (data.length > 1 ? (i / (data.length - 1)) * cW : cW / 2);
-  const yOf  = v => pad.top  + cH * (1 - (v - yLo) / (yHi - yLo));
-  const pts  = vals.map((v, i) => [xOf(i), yOf(v)]);
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
-  const area = `${line}L${pts.at(-1)[0].toFixed(1)},${(pad.top + cH).toFixed(1)}L${pts[0][0].toFixed(1)},${(pad.top + cH).toFixed(1)}Z`;
-
-  // lo/hi are already in display units — round for tick labels (whole numbers
-  // for volume, nearest 0.5 for weight).
-  const yTicks = [lo, (lo + hi) / 2, hi].map(v =>
-    metric === 'volume' ? Math.round(v) : Math.round(v * 2) / 2);
-
-  const nLabels = Math.min(data.length, 5);
-  const xIdxs  = Array.from({ length: nLabels }, (_, k) =>
-    Math.round(k * (data.length - 1) / Math.max(nLabels - 1, 1))
-  );
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const shortDate = s => { const [,m,d] = s.split('-').map(Number); return `${MONTHS[m-1]} ${d}`; };
-
-  // Hover / tap to inspect a point — map the pointer to the nearest data index.
-  const svgRef = useRef(null);
-  const [active, setActive] = useState(null);
-  const locate = e => {
-    const svg = svgRef.current; if (!svg) return;
-    const cx = e.clientX ?? e.touches?.[0]?.clientX ?? e.changedTouches?.[0]?.clientX;
-    if (cx == null) return;
-    const rect = svg.getBoundingClientRect();
-    const vbX = (cx - rect.left) / rect.width * W;
-    const i = data.length > 1 ? Math.round((vbX - pad.left) / cW * (data.length - 1)) : 0;
-    setActive(Math.max(0, Math.min(data.length - 1, i)));
-  };
-
-  return (
-    <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display:'block', touchAction:'pan-y', cursor:'crosshair' }}
-      onMouseMove={locate} onMouseLeave={() => setActive(null)} onTouchStart={locate} onTouchMove={locate}>
-      {yTicks.map((v, i) => (
-        <line key={i} x1={pad.left} y1={yOf(v)} x2={W - pad.right} y2={yOf(v)}
-          stroke="var(--border)" strokeWidth="1" />
-      ))}
-      <path d={area} fill="var(--success)" opacity="0.07" />
-      <path d={line} fill="none" stroke="var(--success)" strokeWidth="2"
-        strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={data.length > 15 ? 2 : 3} fill="var(--success)" />
-      ))}
-      {yTicks.map((v, i) => (
-        <text key={i} x={pad.left - 6} y={yOf(v) + 4} textAnchor="end" fontSize="11" fill="var(--dim)">{v}</text>
-      ))}
-      <text x={8} y={pad.top + cH / 2} textAnchor="middle" fontSize="10" fill="var(--dim)"
-        transform={`rotate(-90,8,${pad.top + cH / 2})`}>{metric === 'volume' ? `${unit}·reps` : unit}</text>
-      {xIdxs.map((idx, k) => (
-        <text key={k} x={xOf(idx)} y={H - 4} textAnchor="middle" fontSize="11" fill="var(--dim)">
-          {shortDate(data[idx].date)}
-        </text>
-      ))}
-
-      {active != null && (() => {
-        const d = data[active];
-        const ax = xOf(active), ay = yOf(toDisp(valueOf(d)));
-        const valStr = metric === 'volume'
-          ? `${Math.round(toDisp(d.volume)).toLocaleString()} ${unit}·reps`
-          : `${toDisp(d.max_weight)} ${unit}`;
-        const setsStr = `${d.sets_logged} set${d.sets_logged !== 1 ? 's' : ''}`;
-        const lineH = 15, boxW = 128, boxH = 10 + 3 * lineH;
-        const bx = Math.max(2, Math.min(W - boxW - 2, ax - boxW / 2));
-        let by = ay - boxH - 12;
-        if (by < pad.top) by = ay + 14;
-        by = Math.max(2, Math.min(H - boxH - 2, by));
-        return (
-          <g style={{ pointerEvents: 'none' }}>
-            <line x1={ax} y1={pad.top} x2={ax} y2={pad.top + cH} stroke="var(--dim)" strokeWidth="1" strokeDasharray="3 3" />
-            <circle cx={ax} cy={ay} r="4.5" fill="var(--success)" stroke="var(--surface2)" strokeWidth="1.5" />
-            <rect x={bx} y={by} width={boxW} height={boxH} rx="6" fill="#1c1c1c" stroke="#333" />
-            <text x={bx + 9} y={by + 16}            fontSize="11" fontWeight="700" fill="#e8e8e8">{shortDate(d.date)}</text>
-            <text x={bx + 9} y={by + 16 + lineH}     fontSize="11" fill="var(--success)">{valStr}</text>
-            <text x={bx + 9} y={by + 16 + 2 * lineH} fontSize="11" fill="#9a9a9a">{setsStr}</text>
-          </g>
-        );
-      })()}
-    </svg>
-  );
-}
-
-// ── Exercise history modal ─────────────────────────────────────────────────────
-
-function ExerciseHistoryModal({ exercise, onClose }) {
-  const { display } = useUnit();
-  const [history, setHistory] = useState(null);
-  const [metric, setMetric]   = useState('volume');
-
-  useEffect(() => {
-    api.getExerciseHistory(exercise.exercise_id).then(setHistory);
-  }, [exercise.exercise_id]); // eslint-disable-line
-
-  const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem' };
-  const box     = { background:'var(--surface2)', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'560px', display:'flex', flexDirection:'column', gap:'1rem', border:'1px solid var(--border)' };
-  const tab     = active => ({
-    flex:1, padding:'0.45rem 0', minHeight:'34px',
-    border:`1px solid ${active ? 'var(--btn)' : 'var(--border)'}`, borderRadius:'7px',
-    background: active ? 'var(--btn)' : 'var(--surface)',
-    color: active ? 'var(--btn-text)' : 'var(--text)',
-    fontSize:'0.8rem', fontWeight: active ? '700' : '500', cursor:'pointer',
-  });
-  const valueOf = d => metric === 'volume' ? d.volume : d.max_weight;
-  // Volume is a sum of weight×reps products — round to 0.1 before display so
-  // floating-point noise (e.g. 4321.8000000000002) doesn't leak through.
-  const round1  = n => Math.round(n * 10) / 10;
-
-  return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={box}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-            <span style={{ fontWeight:'700', fontSize:'1rem', color:'var(--text)' }}>{exercise.name}</span>
-            <MuscleGroupBadge muscleGroup={exercise.muscle_group} />
-          </div>
-          <button type="button" onClick={onClose}
-            style={{ background:'none', border:'none', color:'var(--dim)', fontSize:'1.4rem', cursor:'pointer', lineHeight:1, padding:'0 4px', flexShrink:0 }}>✕</button>
-        </div>
-
-        {!history && <p style={{ color:'var(--muted)', margin:0 }}>Loading…</p>}
-        {history?.length === 0 && <p style={{ color:'var(--muted)', margin:0 }}>No sessions logged yet.</p>}
-        {history?.length > 0 && (
-          <>
-            <div style={{ display:'flex', gap:'0.4rem' }}>
-              <button type="button" onClick={() => setMetric('volume')} style={tab(metric === 'volume')}>Volume</button>
-              <button type="button" onClick={() => setMetric('weight')} style={tab(metric === 'weight')}>Top weight</button>
-            </div>
-            <HistoryChart data={history} metric={metric} />
-            <div style={{ display:'flex', gap:'1.5rem', fontSize:'0.8rem', color:'var(--muted)' }}>
-              <span>{history.length} session{history.length !== 1 ? 's' : ''}</span>
-              <span>Peak: {display(round1(Math.max(...history.map(valueOf))))}</span>
-              <span>Latest: {display(round1(valueOf(history.at(-1))))}</span>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Exercise card ──────────────────────────────────────────────────────────────
-
-function ExerciseCard({ exercise, onAddSet, onRemoveSet, onEdit, onResumeWeight, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, getStatus, onWeightChange, onRepsChange, onClickTick, onClickUndo, isBodyweight = false, bodyweightStr = '', onBodyweightChange, isReadOnly = false }) {
-  const { unit } = useUnit();
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const colHeader   = { fontSize:'0.7rem', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--dim)', textAlign:'center' };
-  // Header action buttons (history / edit) — sized as proper tap targets.
-  const iconBtn     = { background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'8px',
-    width:'34px', height:'34px', display:'flex', alignItems:'center', justifyContent:'center',
-    cursor:'pointer', color:'var(--muted)', flexShrink:0, padding:0 };
-  const isSetDone   = (setNum) => {
-    const st = getStatus(exercise.exercise_id, setNum);
-    return st.status === 'logged' || st.status === 'skipped';
-  };
-  const lastSetDone = isSetDone(exercise.sets.length);
-  // "Complete" once every set is logged or skipped.
-  const exerciseComplete = exercise.sets.every(s => isSetDone(s.set_num));
-
-  // Reps-only exercises (bodyweight / weight-paused) can only grow by adding
-  // sets, up to the user's configured optimal_sets ceiling (default 6). When
-  // all sets are logged at the rep ceiling and the optimal target is reached,
-  // there is no further automatic progression path — a stall alert fires.
-  const repsOnly    = isBodyweight || exercise.pause_weight === 1;
-  const optimalSets = exercise.optimal_sets ?? 6;
-  const isStalled   = repsOnly && exercise.sets.length >= optimalSets && exerciseComplete &&
-    exercise.sets.every(s => {
-      const st = getStatus(exercise.exercise_id, s.set_num);
-      return st.status === 'logged' && parseInt(st.reps, 10) >= exercise.rep_max;
-    });
-
-  // Progressive-overload hint: arrow + % volume delta + primary weight bump +
-  // total reps delta — this session's target vs the user's last logged
-  // performance of this exercise. Shown only while the card is in progress;
-  // it disappears once every set is logged.
-  const volumeHint = computeProgressionHint({
-    sets: exercise.sets,
-    repMin: exercise.rep_min,
-    repMax: exercise.rep_max,
-    exerciseComplete,
-    isBodyweight,
-    unit,
-  });
-
-  return (
-    <div
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',''); onDragStart(); }}
-      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect='move'; onDragOver(); }}
-      onDrop={e => { e.preventDefault(); onDrop(); }}
-      onDragEnd={onDragEnd}
-      style={{ position:'relative', border:`1px solid ${isDragOver ? 'var(--muted)' : 'var(--border)'}`, borderRadius:'10px', padding:'1rem', marginTop:'1rem', marginBottom:'0.75rem', background: isDragOver ? 'var(--surface2)' : 'var(--surface)', transition:'border-color 0.1s, background 0.1s' }}
-    >
-      {/* Muscle-group tab — straddles the card's top edge, aligned to the
-          left edge of the weight-input column. */}
-      <div style={{ position:'absolute', top:'-12px', left:'1rem', display:'inline-flex', alignItems:'center', gap:'5px',
-        background:'var(--surface3)', border:`1px solid ${mcColor(exercise.muscle_group)}66`, borderRadius:'6px', padding:'3px 9px' }}>
-        <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
-          {[7,10,7].map((h,i) => <div key={i} style={{ width:'2.5px', height:`${h}px`, background:mcColor(exercise.muscle_group), borderRadius:'2px' }} />)}
-        </div>
-        <span style={{ fontSize:'0.66rem', fontWeight:'700', letterSpacing:'0.1em', textTransform:'uppercase', color:mcColor(exercise.muscle_group) }}>{exercise.muscle_group}</span>
-      </div>
-      <div style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.8rem', cursor:'grab', userSelect:'none' }}>
-        <span style={{ color:'var(--dim)', fontSize:'1rem', marginTop:'6px', flexShrink:0, letterSpacing:'-1px' }}>⠿</span>
-        <div style={{ flex:1, minWidth:0 }}>
-          {/* Row 1 — name (own line, wraps freely) + action buttons */}
-          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px' }}>
-            <span style={{ fontWeight:'600', fontSize:'1.05rem', color:'var(--text)', lineHeight:1.3, minWidth:0 }}>
-              {exercise.name}
-              {exerciseComplete && <span style={{ color:'var(--success)', marginLeft:'6px' }}>✓</span>}
-            </span>
-            <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-              <button type="button" onClick={e => { e.stopPropagation(); setHistoryOpen(true); }}
-                style={iconBtn} title="View history">
-                <HistoryIcon />
-              </button>
-              {onEdit && (
-                <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }}
-                  style={{ ...iconBtn, fontSize:'1.2rem', lineHeight:1 }} title="Edit exercise">
-                  ✎
-                </button>
-              )}
-              {exercise.pause_weight === 1 && (
-                <button type="button" onClick={e => { e.stopPropagation(); onResumeWeight?.(); }}
-                  style={{ ...iconBtn, borderColor:'#e0a030', color:'#e0a030' }}
-                  title="Weight is paused — tap to resume weight progression">
-                  <span style={{ display:'inline-flex', gap:'3px' }}>
-                    <span style={{ width:'3px', height:'13px', background:'currentColor', borderRadius:'1.5px' }} />
-                    <span style={{ width:'3px', height:'13px', background:'currentColor', borderRadius:'1.5px' }} />
-                  </span>
-                </button>
-              )}
-            </div>
-          </div>
-          {exercise.equipment && (
-            <div style={{ fontSize:'0.75rem', color:'var(--dim)', textTransform:'capitalize', marginTop:'7px' }}>
-              {exercise.equipment}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {isBodyweight && (() => {
-        const bwLocked = exercise.sets.some(s => isSetDone(s.set_num));
-        return (
-          <div style={{ marginBottom:'0.75rem' }}>
-            <div style={{ fontSize:'0.75rem', color:'var(--muted)', marginBottom:'4px' }}>Bodyweight</div>
-            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-              <input
-                type="number" value={bodyweightStr} min="0" step="0.5"
-                onChange={e => onBodyweightChange?.(e.target.value)}
-                placeholder={unit === 'lbs' ? '160' : '70'}
-                disabled={bwLocked}
-                style={{ padding:'0.4rem 0.6rem', border:'1px solid var(--border)', borderRadius:'8px', background:'var(--input-bg)', color: bwLocked ? 'var(--dim)' : 'var(--text)', width:'100px', textAlign:'center', fontSize:'1rem', outline:'none', opacity: bwLocked ? 0.6 : 1, cursor: bwLocked ? 'not-allowed' : 'text' }}
-              />
-              <span style={{ fontSize:'0.875rem', color:'var(--dim)' }}>{unit}</span>
-              {bwLocked && <span style={{ fontSize:'0.75rem', color:'var(--dim)' }}>locked</span>}
-            </div>
-          </div>
-        );
-      })()}
-
-      <div style={{ display:'grid', gridTemplateColumns: isBodyweight ? '1fr 44px' : '1fr 1fr 44px', gap:'10px', marginBottom:'8px' }}>
-        {!isBodyweight && <div style={colHeader}>Weight</div>}
-        <div style={colHeader}>Reps</div>
-        <div style={{ ...colHeader, textAlign:'center' }}>Log</div>
-      </div>
-
-      {exercise.sets.map(set => {
-        const st = getStatus(exercise.exercise_id, set.set_num);
-        return (
-          <SetRow key={set.set_num} set={set}
-            isBodyweight={isBodyweight}
-            bodyweightStr={bodyweightStr}
-            isReadOnly={isReadOnly}
-            status={st.status}
-            weight={st.weight}
-            reps={st.reps}
-            repMin={exercise.rep_min}
-            repMax={exercise.rep_max}
-            onWeightChange={(val) => onWeightChange(exercise.exercise_id, set.set_num, val)}
-            onRepsChange={(val) => onRepsChange(exercise.exercise_id, set.set_num, val)}
-            onClickTick={() => onClickTick(exercise.exercise_id, set.set_num)}
-            onClickUndo={() => onClickUndo(exercise.exercise_id, set.set_num)}
-          />
-        );
-      })}
-
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid var(--border)' }}>
-        <span style={{ fontSize:'0.72rem', color: isStalled ? '#f0a030' : volumeHint ? volumeHint.color : 'var(--muted)', letterSpacing:'0.01em' }}>
-          {isStalled
-            ? <>
-                Progression stalled at optimal set target.{' '}
-                {onEdit && (
-                  <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }}
-                    style={{ background:'none', border:'none', color:'#f0a030', textDecoration:'underline', cursor:'pointer', fontSize:'0.72rem', padding:'4px 2px', margin:'-4px -2px' }}>
-                    Edit settings
-                  </button>
-                )}
-              </>
-            : (volumeHint?.text ?? '')}
-        </span>
-        {!isReadOnly && (
-          <div style={{ display:'flex', gap:'0.4rem' }}>
-            <button type="button" onClick={onRemoveSet} disabled={exercise.sets.length <= 1 || lastSetDone}
-              style={{ padding:'0.2rem 0.65rem', background:'none', border:'1px solid var(--border)', borderRadius:'4px', color: exercise.sets.length <= 1 || lastSetDone ? 'var(--border)' : 'var(--dim)', fontSize:'0.8rem', cursor: exercise.sets.length <= 1 || lastSetDone ? 'default' : 'pointer' }}>
-              − set
-            </button>
-            <button type="button" onClick={onAddSet}
-              style={{ padding:'0.2rem 0.65rem', background:'none', border:'1px solid var(--border)', borderRadius:'4px', color:'var(--muted)', fontSize:'0.8rem', cursor:'pointer' }}>
-              + set
-            </button>
-          </div>
-        )}
-      </div>
-
-      {historyOpen && (
-        <ExerciseHistoryModal exercise={exercise} onClose={() => setHistoryOpen(false)} />
-      )}
-    </div>
-  );
-}
+import { DAY_LABELS, fmtDate } from '../components/today/helpers.js';
+import { WeekShrinkWarningModal, EndOfPlanModal, SkipSessionModal, FinishConfirmModal, ResumeWeightModal } from '../components/today/modals.jsx';
+import { DayPickerPanel } from '../components/today/DayPickerPanel.jsx';
+import { ExerciseCard } from '../components/today/ExerciseCard.jsx';
 
 // ── Today page ─────────────────────────────────────────────────────────────────
 
@@ -961,6 +71,11 @@ export default function TodayPage() {
   const [loading, setLoading]       = useState(true);
   const [sessLoading, setSessLoading] = useState(false);
   const [error, setError]           = useState(null);
+  // A queued set the server refused for good (validation) — shown as a banner.
+  const [syncError, setSyncError]   = useState(null);
+  // Deload suggestion for the active plan (server: GET /stats/deload).
+  const [deload, setDeload]         = useState(null);
+  const [deloadDismissed, setDeloadDismissed] = useState(false);
 
   // ── Step 1: load plan + calendar, pick default slot ──────────────────────────
 
@@ -972,6 +87,7 @@ export default function TodayPage() {
 
       const calData = await api.getPlanCalendar(plan.id);
       setCalendarData(calData);
+      api.getDeload().then(setDeload).catch(() => {});
 
       // Flatten all slots with weekNum embedded; pick the current slot (▶) first
       const allSlots = calData.weeks.flatMap(w =>
@@ -1034,7 +150,8 @@ export default function TodayPage() {
       }
 
       if (sess) {
-        const loggedSets = await api.getSessionSets(sess.id);
+        // Overlay ops still waiting in the outbox (e.g. logged while offline).
+        const loggedSets = outbox.overlay(sess.id, await api.getSessionSets(sess.id));
         for (const ls of loggedSets) {
           const key = `${ls.exercise_id}-${ls.set_num}`;
           const cur = statuses.get(key) ?? { status: 'idle', weight: '', reps: '' };
@@ -1149,6 +266,18 @@ export default function TodayPage() {
     })
   );
 
+  // "Not now" on the deload banner hides it for the rest of that plan week.
+  const deloadKey = activePlan && selectedSlot ? `ft_deload_dismissed_${activePlan.id}_${selectedSlot.weekNum}` : null;
+  useEffect(() => {
+    if (!deloadKey) return;
+    try { setDeloadDismissed(localStorage.getItem(deloadKey) === '1'); } catch { setDeloadDismissed(false); }
+  }, [deloadKey]);
+  function dismissDeload() {
+    setDeloadDismissed(true);
+    try { localStorage.setItem(deloadKey, '1'); } catch { /* storage blocked */ }
+  }
+  const showDeload = deload?.suggest && !deloadDismissed && isCurrent && !allDone;
+
   // ── Workout-completion side effects ───────────────────────────────────────────
   // When the last set is logged the algorithm has already run server-side
   // (per-exercise, on every set change). Here we just refresh the calendar so
@@ -1157,15 +286,31 @@ export default function TodayPage() {
   useEffect(() => {
     if (sessLoading || isReadOnly || !allDone || completionHandledRef.current) return;
     completionHandledRef.current = true;
-    if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData).catch(() => {});
-    // Show the week-on-week recap; if this was the plan's last session, queue the
-    // end-of-plan prompt to follow once the recap is dismissed.
-    if (session?.id) api.getRecap(session.id).then(setRecap).catch(() => {});
+    // Wait until every queued set has reached the server — the calendar and
+    // recap must reflect the final set, which may still be in flight (or
+    // waiting for the connection to come back).
+    const sessId = session?.id;
+    outbox.whenIdle().then(() => {
+      if (activePlan) api.getPlanCalendar(activePlan.id).then(setCalendarData).catch(() => {});
+      // Show the week-on-week recap; if this was the plan's last session, queue the
+      // end-of-plan prompt to follow once the recap is dismissed.
+      if (sessId) api.getRecap(sessId).then(setRecap).catch(() => {});
+    });
     const lastWeek = calendarData?.weeks?.[calendarData.weeks.length - 1];
     const lastDay  = lastWeek?.days?.[lastWeek.days.length - 1];
     if (lastWeek?.week_num === selectedSlot?.weekNum && lastDay?.day_of_week === selectedSlot?.dow)
       setPendingEndOfPlan(true);
   }, [allDone, sessLoading, isReadOnly]); // eslint-disable-line
+
+  // The server permanently refused a queued set (e.g. it failed validation):
+  // put the set back the way the server has it and tell the user.
+  useEffect(() => outbox.onRejected(op => {
+    if (op.sessionId === session?.id) {
+      patchStatus(op.exerciseId, op.setNum, { status: op.kind === 'log' ? 'idle' : 'logged' });
+      completionHandledRef.current = false;
+    }
+    setSyncError(op.serverError ?? 'A set could not be saved.');
+  }), [session?.id]); // eslint-disable-line
 
   // Persist unsaved weight/reps so they survive a reload or slot switch.
   // Fired on every setStatuses change; only idle sets with values that DIFFER
@@ -1230,17 +375,14 @@ export default function TodayPage() {
     // the input so the logged set shows what was recorded. The server re-derives
     // next-session targets the moment this lands — no check-in step.
     patchStatus(exId, setNum, usedRec ? { status: 'logged', reps: String(repsDone) } : { status: 'logged' });
-    try {
-      await api.logSet(session.id, { exercise_id: exId, set_num: setNum, reps_done: repsDone, skipped: 0, weight_used: weightKg });
-    } catch {
-      patchStatus(exId, setNum, { status: 'idle' });
-    }
+    setSyncError(null);
+    api.queueLogSet(session.id, { exercise_id: exId, set_num: setNum, reps_done: repsDone, skipped: 0, weight_used: weightKg });
   }
 
   async function handleClear(exId, setNum) {
     if (!session?.id || isReadOnly) return;
     patchStatus(exId, setNum, { status: 'idle' });
-    api.unlogSet(session.id, exId, setNum).catch(() => {});
+    api.queueUnlogSet(session.id, exId, setNum);
   }
 
   async function handleClickTick(exId, setNum) {
@@ -1419,13 +561,20 @@ export default function TodayPage() {
 
   async function handleConfirmFinish() {
     const { toLog, toSkip } = finishModal;
-    // Throws on failure → FinishConfirmModal surfaces it and keeps the modal open.
-    await Promise.all([
-      ...toLog.map(item => api.logSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: item.reps, skipped: 0, weight_used: item.weightKg })),
-      ...toSkip.map(item => api.logSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: null, skipped: 1, weight_used: null })),
-    ]);
+    // Queue every set (works offline), mark them locally, then reload the slot
+    // from the server once the outbox has delivered them.
+    for (const item of toLog)
+      api.queueLogSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: item.reps, skipped: 0, weight_used: item.weightKg });
+    for (const item of toSkip)
+      api.queueLogSet(session.id, { exercise_id: item.exerciseId, set_num: item.setNum, reps_done: null, skipped: 1, weight_used: null });
+    setSetStatuses(prev => {
+      const n = new Map(prev);
+      for (const item of toLog)  n.set(`${item.exerciseId}-${item.setNum}`, { ...n.get(`${item.exerciseId}-${item.setNum}`), status: 'logged', reps: String(item.reps) });
+      for (const item of toSkip) n.set(`${item.exerciseId}-${item.setNum}`, { ...n.get(`${item.exerciseId}-${item.setNum}`), status: 'skipped' });
+      return n;
+    });
     setFinishModal(null);
-    setReloadKey(k => k + 1);
+    outbox.whenIdle().then(() => setReloadKey(k => k + 1));
   }
 
   // Max weight (kg) across all sets currently shown on the card being edited.
@@ -1471,7 +620,7 @@ export default function TodayPage() {
           <div style={{ fontSize:'0.8rem', color:'var(--muted)', marginTop:'4px' }}>
             {/* Blank session has session.date = null → show today. First log
                 stamps it; once finalized it's locked even after unlock. */}
-            {fmtDate(session?.date ?? new Date().toISOString().split('T')[0])}
+            {fmtDate(session?.date ?? localDateStr())}
             {activePlan && <span style={{ color:'var(--dim)' }}> · {activePlan.name}</span>}
             {isLocked && <span style={{ marginLeft:'0.5rem', fontSize:'0.72rem', color:'var(--dim)', letterSpacing:'0.05em' }}>· locked</span>}
           </div>
@@ -1508,6 +657,30 @@ export default function TodayPage() {
         <p style={{ color:'var(--muted)' }}>No exercises scheduled for this day.</p>
       ) : (
         <>
+          {syncError && (
+            <div role="alert" style={{ marginBottom:'1rem', padding:'0.55rem 0.85rem', background:'#2a1010', border:'1px solid #4a1a1a', borderRadius:'8px', fontSize:'0.82rem', color:'var(--danger)', display:'flex', justifyContent:'space-between', gap:'0.75rem' }}>
+              <span>Not saved: {syncError}</span>
+              <button type="button" onClick={() => setSyncError(null)} aria-label="Dismiss"
+                style={{ background:'none', border:'none', color:'var(--danger)', cursor:'pointer', padding:0, fontSize:'0.85rem' }}>Dismiss</button>
+            </div>
+          )}
+
+          {showDeload && (
+            <div role="note" style={{ marginBottom:'1rem', padding:'0.75rem 0.9rem', background:'var(--surface)', border:'1px solid var(--mc-shoulders)', borderRadius:'10px', fontSize:'0.84rem', color:'var(--muted)', lineHeight:1.5 }}>
+              <div style={{ color:'var(--text)', fontWeight:'700', marginBottom:'0.25rem' }}>Time for a lighter week?</div>
+              {deload.slow} of {deload.judged} lifts have come in under target two sessions in a row
+              {deload.slow_lifts?.length > 0 && <> ({deload.slow_lifts.slice(0, 3).join(', ')}{deload.slow_lifts.length > 3 ? `, +${deload.slow_lifts.length - 3} more` : ''})</>}.
+              {' '}When most lifts stall together it's usually fatigue, not strength. Try about 10% less weight with the same reps this week —
+              your targets will pick up from whatever you actually lift.
+              <div style={{ marginTop:'0.5rem' }}>
+                <button type="button" onClick={dismissDeload}
+                  style={{ background:'none', border:'1px solid var(--border)', borderRadius:'7px', color:'var(--text)', fontSize:'0.8rem', padding:'0.4rem 0.8rem', minHeight:'34px', cursor:'pointer' }}>
+                  Not now
+                </button>
+              </div>
+            </div>
+          )}
+
           {isReadOnly && (
             <div style={{ marginBottom:'1rem', padding:'0.55rem 0.85rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', fontSize:'0.8rem', color:'var(--dim)' }}>
               {isLocked ? '🔒 This session is locked — complete the current session first.' : 'Read-only view of a completed session.'}
@@ -1591,6 +764,7 @@ export default function TodayPage() {
             rep_max: editingExercise.rep_max,
             pause_weight: editingExercise.pause_weight,
             optimal_sets: editingExercise.optimal_sets,
+            can_edit: editingExercise.can_edit,
           }}
           slot={{ planId: editingExercise.plan_id, scheduleId: editingExercise.schedule_id, setCount: editingExercise.set_count }}
           maxWeightKg={editingMaxWeightKg}

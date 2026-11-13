@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/index.js';
 import { useAuth } from '../auth.jsx';
@@ -15,6 +15,10 @@ export default function AuthPage() {
   const [glyph, setGlyph]       = useState('🏋️');
   const [error, setError]       = useState('');
   const [busy, setBusy]         = useState(false);
+
+  // null = unknown yet; the Register tab only shows when sign-up is open.
+  const [regOpen, setRegOpen]   = useState(null);
+  useEffect(() => { api.getRegistration().then(r => setRegOpen(r.open)).catch(() => setRegOpen(false)); }, []);
 
   function switchTab(t) { setTab(t); setError(''); }
 
@@ -35,7 +39,8 @@ export default function AuthPage() {
     } catch (err) {
       const msg = err.message ?? '';
       // Try to extract the server error message from the response
-      setError(msg.includes('409') ? 'Username already taken'
+      setError(err.status === 403 || err.status === 429 ? (err.serverError ?? 'Not allowed')
+             : msg.includes('409') ? 'Username already taken'
              : msg.includes('401') ? 'Invalid username or password'
              : msg.includes('400') ? 'Please fill in all required fields'
              : 'Something went wrong — try again');
@@ -68,7 +73,7 @@ export default function AuthPage() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
             {tabBtn('login', 'Log in')}
-            {tabBtn('register', 'Register')}
+            {regOpen && tabBtn('register', 'Register')}
           </div>
 
           <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>

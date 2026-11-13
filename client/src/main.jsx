@@ -10,3 +10,10 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>
 );
+
+// Offline app shell. Browsers only allow service workers on HTTPS or
+// localhost; over plain http (e.g. a LAN IP) this is skipped and the app works
+// as before — set logging is still protected by the outbox either way.
+if ('serviceWorker' in navigator && window.isSecureContext && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}

@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { effectiveSetCount, recordSetCount } from '../setCounts.js';
-
-const todayStr = () => new Date().toISOString().split('T')[0];
+import { check, isInt, LIMITS } from '../validate.js';
 
 const router = Router();
 
@@ -11,7 +10,7 @@ router.get('/', (req, res) => {
     SELECT s.id, s.day_of_week, s.set_count, s.position,
            e.id as exercise_id, e.name, e.muscle_group, e.equipment,
            (SELECT st.weight FROM set_targets st
-            WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= date('now')
+            WHERE st.exercise_id = e.id AND st.set_num = 1 AND st.valid_from <= ?
               AND st.plan_id IS s.plan_id
             ORDER BY st.is_suggestion ASC, st.valid_from DESC LIMIT 1) as weight
     FROM schedule s
@@ -19,13 +18,13 @@ router.get('/', (req, res) => {
     JOIN workout_plans wp ON s.plan_id = wp.id
     WHERE wp.user_id = ?
     ORDER BY s.day_of_week, s.position
-  `).all(req.user.id));
+  `).all(req.today, req.user.id));
 });
 
 router.get('/today', (req, res) => {
   const dayOfWeek  = req.query.dow !== undefined
     ? parseInt(req.query.dow, 10)
-    : (new Date().getDay() + 6) % 7;
+    : (new Date(req.today + 'T00:00:00Z').getUTCDay() + 6) % 7;
   const weekNum    = req.query.week !== undefined ? parseInt(req.query.week, 10) : null;
   const activePlan = db.prepare('SELECT id FROM workout_plans WHERE is_active = 1 AND user_id = ?').get(req.user.id);
   if (!activePlan) return res.json([]);
@@ -37,13 +36,15 @@ router.get('/today', (req, res) => {
            COALESCE(ues.rep_min, e.rep_min) AS rep_min,
            COALESCE(ues.rep_max, e.rep_max) AS rep_max,
            COALESCE(ues.pause_weight, 0)    AS pause_weight,
-           COALESCE(ues.optimal_sets, 6)    AS optimal_sets
+           COALESCE(ues.optimal_sets, 6)    AS optimal_sets,
+           CASE WHEN e.owner_user_id = @uid OR (e.owner_user_id IS NULL AND @admin = 1) THEN 1 ELSE 0 END AS can_edit
     FROM schedule s JOIN exercises e ON e.id = s.exercise_id
-    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
-    WHERE s.day_of_week = ? AND s.plan_id = ?
+    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = @uid
+    WHERE s.day_of_week = @dow AND s.plan_id = @plan
       AND EXISTS (SELECT 1 FROM plan_days pd WHERE pd.plan_id = s.plan_id AND pd.day_of_week = s.day_of_week)
     ORDER BY s.position
-  `).all(req.user.id, dayOfWeek, activePlan.id);
+  `).all({ uid: req.user.id, dow: dayOfWeek, plan: activePlan.id,
+           admin: db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.user.id)?.is_admin === 1 ? 1 : 0 });
 
   // The session being viewed (when week is provided). Its date — when set —
   // serves as the cutoff for prev: only logs from sessions strictly before
@@ -135,6 +136,13 @@ router.get('/today', (req, res) => {
 router.post('/', (req, res) => {
   const { day_of_week, exercise_id, set_count = 3, position = 0, plan_id } = req.body;
   if (!plan_id) return res.status(400).json({ error: 'plan_id required' });
+  const err = check(req.body, {
+    day_of_week: v => isInt(v, ...LIMITS.dow), set_count: v => isInt(v, ...LIMITS.setCount),
+    position: v => isInt(v, 0, 1000), exercise_id: v => isInt(v, 1, Number.MAX_SAFE_INTEGER),
+  }, ['day_of_week', 'exercise_id']);
+  if (err) return res.status(400).json({ error: err });
+  if (!db.prepare('SELECT 1 FROM exercises WHERE id = ? AND (owner_user_id IS NULL OR owner_user_id = ?)').get(exercise_id, req.user.id))
+    return res.status(404).json({ error: 'Exercise not found' });
   if (!db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(plan_id, req.user.id))
     return res.status(404).json({ error: 'Plan not found' });
   const result = db.prepare(
@@ -148,11 +156,16 @@ router.patch('/:id', (req, res) => {
   if (!slot || !db.prepare('SELECT id FROM workout_plans WHERE id = ? AND user_id = ?').get(slot.plan_id, req.user.id))
     return res.status(404).json({ error: 'Not found' });
   const { set_count, position, day_of_week } = req.body;
+  const err = check(req.body, {
+    day_of_week: v => isInt(v, ...LIMITS.dow), set_count: v => isInt(v, ...LIMITS.setCount),
+    position: v => isInt(v, 0, 1000),
+  });
+  if (err) return res.status(400).json({ error: err });
   const fields = [], values = [];
   if (position    !== undefined) { fields.push('position = ?');    values.push(position); }
   if (day_of_week !== undefined) { fields.push('day_of_week = ?'); values.push(day_of_week); }
   if (fields.length) { values.push(req.params.id); db.prepare(`UPDATE schedule SET ${fields.join(', ')} WHERE id = ?`).run(...values); }
-  if (set_count   !== undefined) recordSetCount(slot.plan_id, slot.day_of_week, slot.exercise_id, set_count, todayStr());
+  if (set_count   !== undefined) recordSetCount(slot.plan_id, slot.day_of_week, slot.exercise_id, set_count, req.today);
   res.json({ ok: true });
 });
 

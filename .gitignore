@@ -9,3 +9,4 @@ client/dist/
 Thumbs.db
 scripts/seed-demo.js
 CLAUDE.md
+backups/

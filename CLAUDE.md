@@ -16,6 +16,9 @@ Progressive overload fitness tracker. Node.js + Express backend, SQLite via `bet
 npm run install:all    # installs both server + client deps
 npm run setup          # creates fitness.db + seeds exercise library
 
+# Tests (unit + API integration against an in-memory DB)
+npm test
+
 # Development (two terminals)
 npm run dev            # API server on :3001
 cd client && npm run dev   # Vite on :5173 with HMR
@@ -31,29 +34,40 @@ npm start              # serves API + built client on :3001
 shared/
   algorithm.js               # double-progression logic — edit here for algorithm changes
   slotDone.js                # shared slot-completion predicate
+  e1rm.js                    # estimated 1RM (Epley) — mirrored in SQL by GET /sessions/history
+  deload.js                  # deload-suggestion rule over per-lift tempo
 server/
-  db.js                      # schema + column migrations (run directly to re-migrate)
+  db.js                      # baseline schema + legacy column migrations (run directly to re-migrate)
+  migrations.js              # versioned migrations (PRAGMA user_version) — add new schema changes here
+  backup.js                  # VACUUM INTO snapshots in backups/ (before migrations, updates, restores)
+  dataTransfer.js            # full per-account JSON export / restore
+  localDate.js               # req.today from the client's X-Local-Date header (±1 day of UTC)
+  validate.js                # small request-validation helpers
   seed.js                    # exercise library seed data (~75 exercises) + sample plan
-  index.js                   # Express entry point + route mounting
-  middleware/auth.js          # JWT cookie middleware
+  app.js                     # Express app + route mounting + error handler (imported by tests)
+  index.js                   # entry point: seed + listen
+  middleware/auth.js          # JWT cookie middleware + requireAdmin
+  test/                      # API integration tests (node:test) — harness.js boots the app on :memory:
   routes/
     auth.js                  # register, login, logout, /me
     exercises.js             # exercise CRUD (incl. rep_min/rep_max) + equipment filter
     schedule.js              # schedule slots + GET /today (per-set targets for a day)
     plans.js                 # workout plans CRUD, plan days, plan schedule, calendar
     sessions.js              # session access, set logging (auto-runs progression), unlock, history
-    stats.js                 # aggregate stats + data reset
-    admin.js                 # in-app git pull + rebuild update endpoint
+    stats.js                 # aggregate stats, CSV + full JSON export, restore, deload, data reset
+    admin.js                 # admin-only: in-app update (backs up first), registration setting
 client/src/
-  api/index.js               # all fetch wrappers — add new endpoints here first
+  api/index.js               # all fetch wrappers — add new endpoints here first; also the set-logging outbox
+  syncQueue.js               # durable outbox: queued set logs, retry/backoff, overlay (unit-tested)
   App.jsx                    # shell, nav, auth gate, routing
   auth.jsx                   # AuthProvider + useAuth hook
   units.js                   # kg/lbs unit context
   progressionHint.js         # pure computeProgressionHint() — overload hint text/colour (unit-tested)
   components/
     ExerciseEditModal.jsx    # shared editor: name, muscle group, equipment, increment, rep range, set count
+    today/                   # TodayPage pieces: SetRow, ExerciseCard, ExerciseHistory, DayPickerPanel, modals, helpers
   pages/
-    TodayPage.jsx            # main workout logging screen (~1300 lines)
+    TodayPage.jsx            # main workout logging screen (state + orchestration)
     PlansPage.jsx            # plan list
     PlanDetailPage.jsx       # plan schedule editor + calendar (per-row exercise edit)
     SchedulePage.jsx         # exercise search + add-to-plan UI
@@ -65,8 +79,9 @@ client/src/
 
 ## Database schema (key tables)
 
-- `users` — accounts with hashed passwords + JWT secret in `config`
-- `exercises` — exercise library; `muscle_group`, `equipment`, `default_increment`, `rep_min`/`rep_max` (per-exercise rep range), `is_custom`
+- `users` — accounts with hashed passwords; `is_admin` (the first account). JWT secret and `registration_open` live in `config`
+- `exercises` — exercise library; `muscle_group`, `equipment`, `default_increment`, `rep_min`/`rep_max` (per-exercise rep range), `is_custom`, `owner_user_id` (NULL = shared library / legacy shared custom; set = private custom exercise)
+- `user_equipment` — per-user equipment list `(user_id, equipment)`
 - `workout_plans` — named plans per user; `is_active` (one active at a time), `week_count`, `started_at`
 - `plan_days` — which days of week (0=Mon…6=Sun) belong to a plan
 - `schedule` — exercises per plan per day; `set_count` (a live mirror of the latest `set_counts` value), `position` for ordering
@@ -82,7 +97,11 @@ client/src/
 - `set_targets` and `set_counts` are append-only — never update, always insert a new row
 - Set-count changes propagate forward only: a completed session always resolves to the count it had, never one added later
 - Sessions are position-based (week_num, session_dow), not date-based
-- `slotDone(s)` — the key predicate used in `sessions.js` and `plans.js`: `s && !s.unlocked && (s.checked_in === 1 || (s.expected_sets > 0 && s.done_sets >= s.expected_sets))`. **All callers must use identical logic** or the current-slot calculation diverges.
+- `slotDone(s)` — the key predicate used in `sessions.js` and `plans.js`: `s && !s.unlocked && s.checked_in === 1`. **All callers must use identical logic** (the plan list's `completed_days` SQL is `checked_in = 1 AND unlocked = 0`) or the current-slot calculation diverges.
+- **"Today" is the user's local date**: never use `date('now')` / `toISOString()` in request handlers — use `req.today` (set by `localDate` middleware from the client's `X-Local-Date`). The client uses `localDateStr()` from `api/index.js`.
+- **Schema changes** go in `server/migrations.js` as a new versioned entry (never edit a shipped one). Pending migrations trigger an automatic snapshot first.
+- **Set logging goes through the outbox** (`api.queueLogSet` / `api.queueUnlogSet`), never a direct POST: it survives offline gaps and reloads. Anything that must see the final set server-side (recap, calendar refresh) waits on `outbox.whenIdle()`.
+- **Access control**: admin-only routes use `requireAdmin`; exercise visibility is `owner_user_id IS NULL OR owner_user_id = user`; only the owner (or the admin, for shared rows) may change an exercise's name/muscle group/equipment.
 
 ## Algorithm (shared/algorithm.js)
 
@@ -124,4 +143,5 @@ Each set is its own progression track, comparing the user's actual logged reps t
 - The progressive-overload hint (target vs last logged performance) shows only on *in-progress* exercise cards; per-set ▲/=/▼ glyphs show actual vs target on logged sets.
 - New exercises start with an empty weight and reps at `rep_min` — there is no starting-weight prompt; the algorithm bootstraps from the first logged session.
 - Old `is_suggestion` rows in `set_targets` are still sorted (`ORDER BY is_suggestion ASC`) but nothing writes them anymore.
-- In-app update (`POST /admin/update`) runs `git pull && npm install && npm run build` then `process.exit(1)` to trigger a systemd restart.
+- In-app update (`POST /admin/update`, admin only) snapshots the DB, runs `git fetch && git reset --hard origin/HEAD && npm install && npm run build`, then `process.exit(1)` to trigger a systemd restart.
+- The service worker (`client/public/sw.js`) only registers on HTTPS or localhost; over plain-http LAN access the app works as before (the outbox still protects set logging).

@@ -28,6 +28,10 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
   const [pause,  setPause]  = useState(!!exercise.pause_weight);
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
+  // Shared identity (name / muscle group / equipment) is editable only by the
+  // exercise's owner, or the admin for library exercises. Personal training
+  // settings below are always editable.
+  const canEditIdentity = exercise.can_edit !== 0;
 
   const mn = parseInt(repMin, 10), mx = parseInt(repMax, 10);
   const rangeValid = Number.isInteger(mn) && Number.isInteger(mx) && mn >= 1 && mx > mn;
@@ -58,9 +62,9 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
       // grows toward the new ceiling naturally; don't force the count now.
       if (slot && optSetsChanged && optSets !== null && !repsOnly)
         await api.updatePlanSlot(slot.planId, slot.scheduleId, { set_count: optSets });
-    } catch {
+    } catch (err) {
       setSaving(false);
-      setError('Could not save. Check your connection and try again.');
+      setError(err.serverError ?? 'Could not save. Check your connection and try again.');
       return;
     }
     onSaved();
@@ -88,13 +92,15 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
             style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.5rem', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '-8px' }}>✕</button>
         </div>
 
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Name" style={inp} />
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Name" disabled={!canEditIdentity}
+          style={{ ...inp, opacity: canEditIdentity ? 1 : 0.55 }} />
 
         <div>
           <p style={label}>Muscle group</p>
           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
             {MUSCLE_GROUPS.map(m => (
-              <button key={m} onClick={() => setMg(m)} style={chip(mg === m)}>{m}</button>
+              <button key={m} onClick={() => setMg(m)} disabled={!canEditIdentity}
+                style={{ ...chip(mg === m), opacity: canEditIdentity || mg === m ? 1 : 0.4, cursor: canEditIdentity ? 'pointer' : 'default' }}>{m}</button>
             ))}
           </div>
         </div>
@@ -103,7 +109,8 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
           <p style={label}>Equipment</p>
           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
             {ALL_EQUIPMENT.map(e => (
-              <button key={e} onClick={() => setEquip(e)} style={chip(equip === e)}>{e}</button>
+              <button key={e} onClick={() => setEquip(e)} disabled={!canEditIdentity}
+                style={{ ...chip(equip === e), opacity: canEditIdentity || equip === e ? 1 : 0.4, cursor: canEditIdentity ? 'pointer' : 'default' }}>{e}</button>
             ))}
           </div>
         </div>
@@ -165,7 +172,9 @@ export function ExerciseEditModal({ exercise, slot, maxWeightKg, onSaved, onClos
 
         <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dim)', lineHeight: 1.5 }}>
           Rep range, weight increment, pause and optimal sets are personal to you.
-          Name, muscle group and equipment are shared across accounts.
+          {canEditIdentity
+            ? (exercise.is_custom ? ' This custom exercise is yours.' : ' Name, muscle group and equipment are shared across accounts.')
+            : ' Name, muscle group and equipment are shared and can only be changed by the admin.'}
         </p>
 
         {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}

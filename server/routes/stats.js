@@ -2,6 +2,15 @@ import { Router } from 'express';
 import { join, dirname } from 'path';
 import db, { dbPath } from '../db.js';
 import { selectProgressWeeks } from '../statsWeeks.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { backupDb } from '../backup.js';
+import { exportUser, importUser, validateExport, accountHasData } from '../dataTransfer.js';
+import { exerciseTempoInfo } from './sessions.js';
+import { deloadAdvice } from '../../shared/deload.js';
+import { addDays } from '../localDate.js';
+
+const APP_VERSION = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf8')).version;
 
 const router = Router();
 
@@ -196,6 +205,14 @@ router.get('/export', (req, res) => {
   const P    = [uid, planId, planId];
   const slug = planId ? '-this-plan' : '';
 
+  // full_json: everything this account owns, restorable via POST /import.
+  if (type === 'full_json') {
+    const data = exportUser(db, uid, APP_VERSION);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="fitnesstrack-backup-${req.today}.json"`);
+    return res.send(JSON.stringify(data));
+  }
+
   // exercise_history: one row per exercise per session — date, key stats per lift
   if (type === 'exercise_history') {
     const rows = db.prepare(`
@@ -282,6 +299,44 @@ router.get('/export', (req, res) => {
   }
 
   res.status(400).json({ error: 'Unknown export type' });
+});
+
+// Deload suggestion for the active plan (see shared/deload.js). Each lift's
+// tempo is judged as of today from its two most recent sessions.
+router.get('/deload', (req, res) => {
+  const uid  = req.user.id;
+  const plan = db.prepare('SELECT id FROM workout_plans WHERE is_active = 1 AND user_id = ?').get(uid);
+  if (!plan) return res.json({ plan_id: null, ...deloadAdvice([]) });
+  const lifts = db.prepare(`
+    SELECT DISTINCT e.id, e.name, e.equipment,
+           COALESCE(ues.pause_weight, 0) AS pause_weight, ues.pause_cap_kg
+    FROM schedule s JOIN exercises e ON e.id = s.exercise_id
+    LEFT JOIN user_exercise_settings ues ON ues.exercise_id = e.id AND ues.user_id = ?
+    WHERE s.plan_id = ?
+  `).all(uid, plan.id);
+  const asOf = addDays(req.today, 1); // include every session up to and including today
+  const info = lifts.map(l => ({
+    name: l.name,
+    ...exerciseTempoInfo(plan.id, l.id, uid, 0, asOf,
+      l.equipment === 'bodyweight' || (l.pause_weight === 1 && l.pause_cap_kg == null)),
+  }));
+  res.json({ plan_id: plan.id, ...deloadAdvice(info) });
+});
+
+// Restore a full_json export into this account, replacing its training data.
+// Body: { data: <export>, replace: boolean }. `replace` must be true when the
+// account already has plans or sessions. A database snapshot is taken first.
+router.post('/import', (req, res) => {
+  const { data, replace } = req.body ?? {};
+  try { validateExport(data); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  if (accountHasData(db, req.user.id) && replace !== true)
+    return res.status(409).json({ error: 'This account already has data. Confirm replacing it to restore.' });
+  let backup;
+  try { backup = backupDb(db, dbPath, 'pre-restore'); }
+  catch (e) { return res.status(500).json({ error: `Backup failed, restore aborted: ${e.message}` }); }
+  const counts = importUser(db, req.user.id, data);
+  res.json({ ok: true, ...counts, backup: backup ? backup.split(/[\/]/).pop() : null });
 });
 
 router.post('/reset', async (req, res) => {

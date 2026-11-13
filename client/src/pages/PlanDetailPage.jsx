@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { api } from '../api/index.js';
+import { api, localDateStr } from '../api/index.js';
 import { useUnit } from '../units.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
 
@@ -376,6 +376,7 @@ function DayCard({ day, dayIndex, slots, planId, onAddClick, onRefresh }) {
             rep_min: editSlot.rep_min,
             rep_max: editSlot.rep_max,
             pause_weight: editSlot.pause_weight,
+            can_edit: editSlot.can_edit,
           }}
           slot={{ planId, scheduleId: editSlot.id, setCount: editSlot.set_count }}
           onSaved={() => { setEditSlot(null); onRefresh(); }}
@@ -593,7 +594,7 @@ export default function PlanDetailPage() {
   async function handleActivate() {
     setActivating(true);
     await api.activatePlan(id);
-    setPlan(p => ({ ...p, is_active: 1, started_at: p.started_at ?? new Date().toISOString().split('T')[0] }));
+    setPlan(p => ({ ...p, is_active: 1, started_at: p.started_at ?? localDateStr() }));
     setActivating(false);
   }
 

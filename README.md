@@ -21,9 +21,12 @@ Runs on a Raspberry Pi, a home server, or any machine with Node.js. Your data st
 - **Calendar view** — see every workout in a grid across weeks; navigate to any past or future session
 - **Per-session logging** — log weight and reps per set; skip individual sets or entire sessions
 - **Actual-vs-target feedback** — a per-set ▲ / = / ▼ glyph shows whether you beat, met, or missed each target
-- **Exercise history** — per-exercise weight progression chart
+- **Exercise history** — per-exercise volume, top weight and estimated 1-rep max charts
+- **Works on patchy gym Wi-Fi** — logged sets are saved on the device first and synced as soon as there's a connection; installable as an app (offline start needs HTTPS — see below)
+- **Deload suggestions** — when most of your lifts come up short two sessions running, the app suggests a lighter week
+- **Backup & restore** — download your whole history as one file and restore it on any install; the server also snapshots the database before migrations, updates and restores
 - **Plan cycling** — when you finish the last session of a plan, the app prompts you to clone it into a new cycle with optional seed weights from any past week
-- **Multi-user** — each user has their own account, plans, and data; no data is shared between users
+- **Multi-user** — each user has their own account, plans, equipment and custom exercises. The first account is the admin; sign-up is closed after that unless the admin opens it in Setup
 - **Equipment filter** — select your available equipment; the exercise picker only shows relevant exercises
 - **Custom exercises** — create exercises not in the built-in library
 - **Weight units** — switch between kg and lbs; conversions are display-only, data is always stored in kg
@@ -392,6 +395,10 @@ sudo certbot --nginx -d your-domain.com
 
 Certbot modifies the nginx config to add HTTPS and sets up automatic renewal.
 
+### Why HTTPS matters for the app
+
+Browsers only allow the offline app shell (service worker) and "install to home screen" on HTTPS. Over plain `http://<LAN-IP>:3001` the app works exactly as before and sets you log offline are still kept and synced — but the app can't be *opened* without a connection. If you use Tailscale, `tailscale serve --bg 3001` gives the Pi an HTTPS address on your tailnet with no other setup.
+
 ### LAN-only HTTPS (no domain required)
 
 For LAN access only, use a self-signed certificate or [mkcert](https://github.com/FiloSottile/mkcert). Note that browsers will show a warning for self-signed certs unless you import the CA into your devices.
@@ -401,7 +408,7 @@ For LAN access only, use a self-signed certificate or [mkcert](https://github.co
 ## First run
 
 1. Navigate to the app in a browser
-2. Click **Register** and create your account (name, avatar glyph, username, password)
+2. Click **Register** and create your account (name, avatar glyph, username, password). This first account is the **admin**. After it exists, sign-up closes; to add another person, turn on **Setup → Allow new sign-ups**, let them register, then turn it off again
 3. Go to **Setup** → select the equipment you have access to
 4. Go to **Plans** → create a new plan, choose your training days
 5. Click into the plan → **Configure** → add exercises to each day
@@ -414,7 +421,7 @@ For LAN access only, use a self-signed certificate or [mkcert](https://github.co
 
 **In-app (Linux / Raspberry Pi with systemd service):**
 
-If FitnessTrack is running as a systemd service, you can update it without a terminal. Navigate to **Setup** in the app → scroll to the bottom → click **Check for updates**. The app pulls the latest code, rebuilds the client, and restarts itself automatically. The page will reload once the new version is live.
+If FitnessTrack is running as a systemd service, the admin can update it without a terminal. Navigate to **Setup** in the app → scroll to the bottom → click **Update to latest**. A database snapshot is saved to `backups/` first. The app pulls the latest code, rebuilds the client, and restarts itself automatically. The page will reload once the new version is live.
 
 > This requires the server to be running under systemd with `Restart=on-failure` so the process manager brings it back up after the restart.
 
@@ -458,7 +465,13 @@ The exercise library (`server/seed.js`) is seeded automatically every time the s
 
 ## Data
 
-All data is stored in a single SQLite file (`fitness.db` by default). To back it up, copy that file while the server is stopped. To restore, replace the file and restart.
+All data is stored in a single SQLite file (`fitness.db` by default).
+
+**Automatic snapshots** — the server writes a copy of the database to `backups/` (next to `fitness.db`) before applying a schema migration, before an in-app update and before a restore. The newest 10 are kept.
+
+**Per-account backup** — **Stats → Backup & restore → Download full backup** saves your plans, targets and every logged set as one JSON file. **Restore from backup…** loads such a file into your account (it replaces that account's current data, after a server-side snapshot), so you can move to a new server without copying the database.
+
+**Whole-database backup** — copy the file while the server is stopped. To restore, replace the file and restart.
 
 ```bash
 # Backup

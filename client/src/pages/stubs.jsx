@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/index.js';
 import { useUnit } from '../units.js';
 import { ExerciseEditModal } from '../components/ExerciseEditModal.jsx';
+import { useAuth } from '../auth.jsx';
 
 const ALL_EQUIPMENT = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
 
@@ -17,6 +18,29 @@ export function SetupPage() {
   const [updateState, setUpdateState] = useState('idle'); // idle | building | restarting | done | error
   const [updateLog, setUpdateLog]     = useState('');
   const pollRef = useRef(null);
+  const { user } = useAuth();
+  const isAdmin  = !!user?.is_admin;
+  const [regOpen, setRegOpen]   = useState(null);
+  const [deleteErr, setDeleteErr] = useState(null);
+
+  useEffect(() => {
+    if (isAdmin) api.getAdminSettings().then(s => setRegOpen(s.registration_open)).catch(() => {});
+  }, [isAdmin]);
+
+  async function handleToggleRegistration() {
+    const r = await api.updateAdminSettings({ registration_open: !regOpen });
+    setRegOpen(r.registration_open);
+  }
+
+  async function handleDeleteCustom(ex) {
+    setDeleteErr(null);
+    try {
+      await api.deleteExercise(ex.id);
+      setCustoms(c => c.filter(e => e.id !== ex.id));
+    } catch (err) {
+      setDeleteErr({ id: ex.id, msg: err.serverError ?? 'Could not delete. Check your connection and try again.' });
+    }
+  }
 
   useEffect(() => {
     Promise.all([api.getEquipment(), api.getCustomExercises()])
@@ -158,11 +182,14 @@ export function SetupPage() {
                 </div>
                 <button onClick={() => setEdit(ex)}
                   style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '0.82rem', padding: '0.5rem 0.75rem', minHeight: '40px', cursor: 'pointer', flexShrink: 0 }}>Edit</button>
-                <button onClick={async () => { await api.deleteExercise(ex.id); setCustoms(c => c.filter(e => e.id !== ex.id)); }}
+                <button onClick={() => handleDeleteCustom(ex)}
                   aria-label="Remove custom exercise"
                   style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '1.1rem', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '6px' }}>✕</button>
               </div>
             ))}
+            {deleteErr && (
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--danger)' }}>{deleteErr.msg}</p>
+            )}
           </div>
         )}
       </section>
@@ -173,7 +200,22 @@ export function SetupPage() {
           Version <strong style={{ color: 'var(--text)' }}>{version ?? '…'}</strong>
         </p>
 
-        {updateState === 'idle' && (
+        {isAdmin && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text)' }}>Allow new sign-ups</span>
+              <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: 'var(--dim)', lineHeight: 1.45 }}>
+                Leave off unless someone needs to create an account. Anyone who can reach this server can register while it's on.
+              </p>
+            </div>
+            <button type="button" onClick={handleToggleRegistration} disabled={regOpen === null} aria-pressed={!!regOpen}
+              style={{ flexShrink: 0, minWidth: '64px', minHeight: '38px', padding: '0 0.9rem', border: `1px solid ${regOpen ? 'var(--btn)' : 'var(--border)'}`, borderRadius: '8px', background: regOpen ? 'var(--btn)' : 'var(--surface)', color: regOpen ? 'var(--btn-text)' : 'var(--text)', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}>
+              {regOpen ? 'On' : 'Off'}
+            </button>
+          </div>
+        )}
+
+        {isAdmin && updateState === 'idle' && (
           <button onClick={handleUpdate}
             style={{ padding: '0.85rem 1.4rem', minHeight: '46px', background: 'var(--btn)', color: 'var(--btn-text)', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer' }}>
             Update to latest

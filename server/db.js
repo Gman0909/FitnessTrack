@@ -2,6 +2,8 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { randomBytes } from 'crypto';
+import { backupDb } from './backup.js';
+import { pendingMigrations, runMigrations } from './migrations.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const dbPath = process.env.DATABASE_PATH ?? join(__dirname, '..', 'fitness.db');
@@ -9,6 +11,14 @@ const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+
+// Snapshot an existing database before any pending versioned migration runs
+// (see migrations.js). A brand-new database has nothing to protect.
+if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()
+    && pendingMigrations(db).length) {
+  const file = backupDb(db, dbPath, `pre-migrate-v${db.pragma('user_version', { simple: true })}`);
+  if (file) console.log(`Backed up database to ${file} before migrating`);
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -344,13 +354,20 @@ db.prepare(`
 
 
 // ── Default equipment (all enabled on first install) ─────────────────────────
+// Only for the legacy global table; once migration v3 has made equipment
+// per-user, new accounts get their defaults at registration instead.
 
-if (db.prepare('SELECT COUNT(*) as n FROM user_equipment').get().n === 0) {
+if (!cols('user_equipment').includes('user_id')
+    && db.prepare('SELECT COUNT(*) as n FROM user_equipment').get().n === 0) {
   const ins = db.prepare('INSERT OR IGNORE INTO user_equipment (equipment) VALUES (?)');
   db.transaction(() => {
     for (const eq of ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']) ins.run(eq);
   })();
 }
+
+// ── Versioned migrations (1.8+) ───────────────────────────────────────────────
+
+runMigrations(db);
 
 // ── JWT secret (generated once, stored in DB) ─────────────────────────────────
 

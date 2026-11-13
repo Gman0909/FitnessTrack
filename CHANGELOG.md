@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.8.0] - 2026-11-13
+
+### Added
+- **Logging works on patchy gym Wi-Fi.** Ticking a set saves it on the device first and syncs it in the background, retrying until the server accepts it — through dead spots, page reloads and closed tabs. A "N sets waiting to sync" marker shows in the header until everything has landed. A set the server rejects is put back and the reason is shown, instead of silently un-ticking.
+- **Installable app with offline start** (on HTTPS): the app opens and shows your last-loaded workout without a connection.
+- **Estimated 1-rep max** charts (Epley) in exercise history and on the Stats page, so a weight bump with a rep reset still shows whether you got stronger.
+- **Deload suggestion**: when at least half of your lifts (with enough history) have come in under target two sessions running, the workout screen suggests a lighter week. Dismiss it for the week with "Not now".
+- **Full backup & restore** (Stats → Backup & restore): your whole account as one JSON file, restorable on any install.
+- **Automatic database snapshots** in `backups/` before schema migrations, in-app updates and restores (newest 10 kept).
+- **Admin account and closed sign-up**: the first account is the admin. Sign-up is closed once an account exists; the admin can open it in Setup.
+
+### Changed
+- **Only the admin can run the in-app updater.** Previously any signed-in account could.
+- **Custom exercises are private** to the account that created them, and **equipment lists are per account** (each existing account keeps the current list). Shared library exercises can be renamed or re-categorised by the admin only; everyone can still tune their own rep range, increment, pause and optimal sets.
+- **Dates follow your timezone.** Sessions are stamped with your device's date rather than the server's UTC date, so an early-morning workout no longer lands on yesterday.
+- A custom exercise with logged history can no longer be deleted (it now explains why instead of failing silently).
+
+### Fixed
+- Unlocking a session no longer erases the next-session targets of another session completed on the same day.
+- The plan list's "completed" count now matches the calendar for an unlocked session.
+- The workout recap and calendar refresh now wait for the final set to reach the server, so the recap can't miss the last set.
+- Requests with malformed or out-of-range values (negative reps, unknown sets, exercises not on that day) are rejected instead of stored.
+
+### Internal
+- Versioned schema migrations (`server/migrations.js`, `PRAGMA user_version`); API integration test suite (`npm test`) and GitHub Actions CI; TodayPage split into `components/today/`; central JSON error handler.
+
+---
+
 ## [1.7.5] - 2026-07-09
 
 ### Changed

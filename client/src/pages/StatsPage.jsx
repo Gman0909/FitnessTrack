@@ -114,15 +114,81 @@ function ResetModal({ onClose, onDone }) {
   );
 }
 
+// ── Restore modal ─────────────────────────────────────────────────────────────
+
+function RestoreModal({ file, data, onClose }) {
+  const [typed,   setTyped]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+  const [done,    setDone]    = useState(null);
+  const ok = typed === 'replace my data';
+  const sets = data.sessions.reduce((n, s) => n + (s.sets?.length ?? 0), 0);
+
+  async function handleRestore() {
+    setLoading(true); setError(null);
+    try { setDone(await api.importData(data)); }
+    catch (e) { setError(e.serverError ?? 'Restore failed. Your data has not been changed.'); setLoading(false); }
+  }
+
+  const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' };
+  const box     = { background: 'var(--surface2)', borderRadius: '12px', padding: '1.25rem', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '1rem' };
+  const inp     = { padding: '0.7rem 0.85rem', minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--input-bg)', color: 'var(--text)', width: '100%', boxSizing: 'border-box', fontSize: '16px' };
+  const btn     = { flex: 1, padding: '0.85rem', minHeight: '48px', borderRadius: '8px', fontSize: '0.95rem', cursor: 'pointer' };
+
+  if (done) return (
+    <div style={overlay}>
+      <div style={box}>
+        <strong style={{ color: 'var(--text)', fontSize: '1rem' }}>Restore complete</strong>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+          Restored {done.plans} plans, {done.sessions} sessions and {done.sets} sets.
+          {done.backup && <> The previous database was saved as <code style={{ wordBreak: 'break-all' }}>{done.backup}</code>.</>}
+        </p>
+        <button onClick={() => window.location.reload()} style={{ ...btn, border: 'none', background: 'var(--btn)', color: 'var(--btn-text)', fontWeight: '700' }}>Reload</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={overlay} onClick={e => e.target === e.currentTarget && !loading && onClose()}>
+      <div style={box}>
+        <strong style={{ color: 'var(--text)', fontSize: '1rem' }}>Restore from backup</strong>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.55 }}>
+          <span style={{ wordBreak: 'break-all' }}>{file}</span>
+          {data.exported_at && <> was exported on {data.exported_at.slice(0, 10)}</>} and holds {data.plans.length} plans,
+          {' '}{data.sessions.length} sessions and {sets} logged sets.
+        </p>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.55 }}>
+          Restoring <strong style={{ color: 'var(--text)' }}>replaces all of your current plans and workout history</strong> with
+          the file&apos;s contents. A copy of the database is saved on the server first.
+        </p>
+        <div>
+          <p style={{ margin: '0 0 0.35rem', fontSize: '0.8rem', color: 'var(--dim)' }}>Type to confirm:</p>
+          <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--muted)', userSelect: 'all' }}>replace my data</p>
+          <input value={typed} onChange={e => setTyped(e.target.value)} placeholder="Type the phrase above…" autoFocus style={inp} />
+        </div>
+        {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={onClose} disabled={loading} style={{ ...btn, border: '1px solid var(--border)', background: 'none', color: 'var(--text)', fontWeight: '500' }}>Cancel</button>
+          <button onClick={handleRestore} disabled={!ok || loading}
+            style={{ ...btn, border: 'none', background: ok ? 'var(--btn)' : 'var(--surface)', color: ok ? 'var(--btn-text)' : 'var(--dim)', fontWeight: '700', cursor: ok ? 'pointer' : 'not-allowed' }}>
+            {loading ? 'Restoring…' : 'Restore'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 async function downloadExport(type, scope) {
   const res = await fetch(`/api/stats/export?type=${type}&scope=${scope}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`Export failed (${res.status})`);
   const ct = res.headers.get('Content-Type') ?? '';
-  if (!ct.startsWith('text/csv')) throw new Error('Export failed — server returned unexpected content type. Try restarting the server.');
+  const json = type === 'full_json';
+  if (!ct.startsWith(json ? 'application/json' : 'text/csv')) throw new Error('Export failed — server returned unexpected content type. Try restarting the server.');
   const cd       = res.headers.get('Content-Disposition') ?? '';
-  const filename = cd.match(/filename="([^"]+)"/)?.[1] ?? `${type}.csv`;
+  const filename = cd.match(/filename="([^"]+)"/)?.[1] ?? `${type}.${json ? 'json' : 'csv'}`;
   const blob     = await res.blob();
   const url      = URL.createObjectURL(blob);
   const a        = document.createElement('a');
@@ -147,7 +213,22 @@ export function StatsPage() {
   const [exHistory, setExHistory] = useState([]);
   const [exMetric,  setExMetric]  = useState('volume');
   const [exporting, setExporting] = useState(null);
+  const [restore,   setRestore]   = useState(null); // { file, data }
+  const [restoreErr, setRestoreErr] = useState(null);
   const { unit, display } = useUnit();
+
+  async function handleRestoreFile(e) {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setRestoreErr(null);
+    try {
+      const data = JSON.parse(await f.text());
+      if (data?.format !== 'fitnesstrack-export' || !Array.isArray(data.sessions) || !Array.isArray(data.plans))
+        throw new Error('not an export');
+      setRestore({ file: f.name, data });
+    } catch { setRestoreErr('That file is not a FitnessTrack backup.'); }
+  }
 
   async function handleExport(type) {
     setExporting(type);
@@ -179,10 +260,10 @@ export function StatsPage() {
   const pieTotal = pieData.reduce((s, r) => s + r.value, 0);
   const maxSess  = top_exercises.reduce((m, e) => Math.max(m, e.session_count), 1);
 
+  const exValue = r => exMetric === 'max_weight' ? r.max_weight : exMetric === 'e1rm' ? r.e1rm : r.volume;
   const exData = exHistory.map(r => ({
     date: r.date.slice(5),
-    y: unit === 'lbs' ? +(( exMetric === 'max_weight' ? r.max_weight : r.volume) * 2.2046).toFixed(1)
-                      : (exMetric === 'max_weight' ? r.max_weight : r.volume),
+    y: unit === 'lbs' ? +(exValue(r) * 2.2046).toFixed(1) : exValue(r),
   }));
 
   const noData = !loading && (overview?.total_workouts ?? 0) === 0;
@@ -327,14 +408,19 @@ export function StatsPage() {
       {exercises.length > 0 && <>
         <Section title="Exercise Progression" />
         <select value={selEx?.exercise_id ?? ''}
-          onChange={e => setSelEx(exercises.find(x => x.exercise_id === Number(e.target.value)) ?? null)}
+          onChange={e => {
+            const ex = exercises.find(x => x.exercise_id === Number(e.target.value)) ?? null;
+            // Est. 1RM isn't offered for bodyweight lifts — fall back to volume.
+            if (ex?.equipment === 'bodyweight') setExMetric(m => m === 'e1rm' ? 'volume' : m);
+            setSelEx(ex);
+          }}
           style={{ padding: '0.7rem 0.85rem', minHeight: '46px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '16px', width: '100%', background: 'var(--input-bg)', color: 'var(--text)', marginBottom: '0.65rem' }}>
           <option value="">Select an exercise…</option>
           {exercises.map(x => <option key={x.exercise_id} value={x.exercise_id}>{x.name}</option>)}
         </select>
         {selEx && <>
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
-            {[['volume', 'Volume'], ['max_weight', 'Max weight']].map(([k, l]) => (
+            {[['volume', 'Volume'], ['max_weight', 'Max weight'], ...(selEx.equipment !== 'bodyweight' ? [['e1rm', 'Est. 1RM']] : [])].map(([k, l]) => (
               <button key={k} onClick={() => setExMetric(k)}
                 style={{ padding: '0.5rem 0.95rem', minHeight: '38px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.85rem', fontWeight: exMetric === k ? '600' : '500', cursor: 'pointer', background: exMetric === k ? 'var(--btn)' : 'var(--surface)', color: exMetric === k ? 'var(--btn-text)' : 'var(--text)' }}>
                 {l}
@@ -349,8 +435,8 @@ export function StatsPage() {
                   <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 10 }} />
                   <YAxis tick={{ fill: '#555', fontSize: 10 }} width={48} />
                   <Tooltip {...TT}
-                    formatter={v => exMetric === 'max_weight'
-                      ? [`${v} ${unit}`, 'Max weight']
+                    formatter={v => exMetric === 'max_weight' || exMetric === 'e1rm'
+                      ? [`${v} ${unit}`, exMetric === 'e1rm' ? 'Est. 1RM' : 'Max weight']
                       : [`${Math.round(v).toLocaleString()} ${volUnit}·reps`, 'Volume']} />
                   <Line type="monotone" dataKey="y" stroke="#e8e8e8" strokeWidth={2}
                     dot={{ r: 3, fill: '#e8e8e8' }} activeDot={{ r: 5 }} />
@@ -437,6 +523,25 @@ export function StatsPage() {
         </div>
       </div>
 
+      {/* Backup & restore */}
+      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+        <h3 style={{ margin: '0 0 0.3rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--dim)' }}>Backup &amp; restore</h3>
+        <p style={{ margin: '0 0 0.85rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
+          A complete copy of your plans, targets and every logged set, as one file. Use it to move to a new server or to recover.
+        </p>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button onClick={() => handleExport('full_json')} disabled={exporting !== null}
+            style={{ padding: '0.7rem 1.1rem', minHeight: '44px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface2)', color: 'var(--text)', fontSize: '0.9rem', fontWeight: '500', cursor: exporting !== null ? 'not-allowed' : 'pointer' }}>
+            {exporting === 'full_json' ? 'Preparing…' : 'Download full backup'}
+          </button>
+          <label style={{ padding: '0.7rem 1.1rem', minHeight: '44px', display: 'inline-flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: '8px', background: 'none', color: 'var(--text)', fontSize: '0.9rem', fontWeight: '500', cursor: 'pointer', boxSizing: 'border-box' }}>
+            Restore from backup…
+            <input type="file" accept="application/json,.json" onChange={handleRestoreFile} style={{ display: 'none' }} />
+          </label>
+        </div>
+        {restoreErr && <p style={{ margin: '0.6rem 0 0', color: 'var(--danger)', fontSize: '0.85rem' }}>{restoreErr}</p>}
+      </div>
+
       {/* Danger zone */}
       <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
         <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--danger)' }}>Danger Zone</h3>
@@ -450,6 +555,7 @@ export function StatsPage() {
       </div>
 
       {showReset && <ResetModal onClose={() => setShowReset(false)} onDone={load} />}
+      {restore && <RestoreModal file={restore.file} data={restore.data} onClose={() => setRestore(null)} />}
     </div>
   );
 }
